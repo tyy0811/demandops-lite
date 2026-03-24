@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../data/processed:/app/data/processed:ro
+      - ../artifacts:/app/artifacts:ro
+    environment:
+      - PYTHONUNBUFFERED=1
