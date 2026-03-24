@@ -2,13 +2,10 @@
 data/raw/*.parquet
 data/processed/*.parquet
 
-# Artifacts
-artifacts/models/*.txt
-artifacts/models/*.bin
-artifacts/models/*.joblib
-artifacts/models/feature_schema.json
+# Artifacts (generated output — ignore all contents)
+artifacts/models/*
 artifacts/zone_universe.json
-artifacts/reports/*.json
+artifacts/reports/*
 
 # MLflow
 mlruns/

@@ -20,6 +20,8 @@ dependencies = [
     "httpx>=0.27.0",
     "pyarrow>=17.0.0",
     "joblib>=1.3.0",
+    "pandas>=2.1.0",
+    "scikit-learn>=1.3.0",
 ]
 
 [project.optional-dependencies]
