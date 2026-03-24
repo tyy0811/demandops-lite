@@ -2,7 +2,9 @@
 
 Uses urllib.request.urlretrieve — no progress bar or retry.
 Acceptable for V1; the TLC CDN is generally reliable.
-For flaky connections, run `make download` again (idempotent).
+Downloads are atomic: writes to a .tmp file first, renames on success.
+If a download is interrupted, the .tmp file is cleaned up and a
+subsequent `make download` will re-fetch correctly.
 """
 
 from __future__ import annotations
@@ -18,6 +20,17 @@ TLC_BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
 ZONES_URL = "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
 
 
+def _atomic_download(url: str, dest: Path) -> None:
+    """Download to a temp file, then atomically rename on success."""
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    try:
+        urlretrieve(url, tmp)
+        tmp.rename(dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def download_month(month: str, raw_dir: Path) -> Path:
     """Download a single month of yellow taxi data. Idempotent."""
     filename = f"yellow_tripdata_{month}.parquet"
@@ -29,7 +42,7 @@ def download_month(month: str, raw_dir: Path) -> Path:
     url = f"{TLC_BASE_URL}/{filename}"
     logger.info("downloading", url=url, dest=str(dest))
     raw_dir.mkdir(parents=True, exist_ok=True)
-    urlretrieve(url, dest)
+    _atomic_download(url, dest)
     logger.info("download_complete", path=str(dest))
     return dest
 
@@ -42,7 +55,7 @@ def download_zones(zones_path: Path) -> Path:
 
     logger.info("downloading_zones", url=ZONES_URL, dest=str(zones_path))
     zones_path.parent.mkdir(parents=True, exist_ok=True)
-    urlretrieve(ZONES_URL, zones_path)
+    _atomic_download(ZONES_URL, zones_path)
     logger.info("download_complete", path=str(zones_path))
     return zones_path
 

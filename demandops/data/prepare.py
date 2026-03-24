@@ -23,6 +23,8 @@ import duckdb
 import polars as pl
 import structlog
 
+from demandops.data.schemas import FeatureSchema, HourlyHistorySchema
+
 logger = structlog.get_logger()
 
 
@@ -219,9 +221,11 @@ def prepare(
         ORDER BY g.zone_id, g.hour_ts
     """)
 
-    # Step 7: Save hourly_history.parquet
+    # Step 7: Validate and save hourly_history.parquet
     history_path = processed_dir / "hourly_history.parquet"
     history_df = con.execute("SELECT * FROM hourly_history").pl()
+    history_df = HourlyHistorySchema.validate(history_df)
+    logger.info("hourly_history_validated")
     history_df.write_parquet(history_path)
     logger.info("hourly_history_saved", path=str(history_path), rows=len(history_df))
 
@@ -241,8 +245,10 @@ def prepare(
 
     logger.info("features_after_cleanup", rows=len(features_df))
 
-    # Step 10: Save features.parquet
+    # Step 10: Validate and save features.parquet
     features_path = processed_dir / "features.parquet"
+    features_df = FeatureSchema.validate(features_df)
+    logger.info("features_validated")
     features_df.write_parquet(features_path)
     logger.info("features_saved", path=str(features_path), rows=len(features_df))
 

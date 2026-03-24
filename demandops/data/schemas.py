@@ -18,6 +18,9 @@ class HourlyHistorySchema(pa.DataFrameModel):
     avg_fare and avg_distance are nullable (null for zero-demand hours).
     """
 
+    class Config:
+        coerce = True
+
     zone_id: int = pa.Field(ge=1, le=263)
     zone_name: str = pa.Field(nullable=False)
     hour_ts: pl.Datetime = pa.Field(nullable=False)
@@ -32,6 +35,9 @@ class FeatureSchema(pa.DataFrameModel):
     No December rows. All lags populated (dense grid guarantees this).
     No nulls in any column. day_of_week uses 0=Mon, 6=Sun convention.
     """
+
+    class Config:
+        coerce = True
 
     zone_id: int = pa.Field(ge=1, le=263)
     hour_ts: pl.Datetime = pa.Field(nullable=False)
@@ -48,6 +54,9 @@ class FeatureSchema(pa.DataFrameModel):
 
 class PredictionOutputSchema(pa.DataFrameModel):
     """Schema for prediction output validation."""
+
+    class Config:
+        coerce = True
 
     zone_id: int = pa.Field(ge=1, le=263)
     hour_ts: pl.Datetime = pa.Field(nullable=False)
