@@ -1,0 +1,93 @@
+"""Tests for the serving API endpoints."""
+
+from __future__ import annotations
+
+import pytest
+from prometheus_client import REGISTRY
+
+
+@pytest.fixture(autouse=True)
+def _reset_prometheus_metrics():
+    """Reset Prometheus collector sample values between tests (fix #16).
+
+    We can't unregister module-level collectors, but we can reset their
+    internal state so counters don't leak across tests.
+    """
+    yield
+    # Reset all sample values after each test
+    for collector in list(REGISTRY._names_to_collectors.values()):
+        if hasattr(collector, "_metrics"):
+            collector._metrics.clear()
+
+
+class TestPredictEndpoint:
+
+    def test_valid_request(self, test_client) -> None:
+        resp = test_client.post("/predict", json={
+            "zone_id": 1,
+            "hour_ts": "2024-02-01T12:00:00",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["zone_id"] == 1
+        assert data["predicted_count"] == 42.5
+        assert data["model_name"] == "lightgbm"
+
+    def test_unsupported_zone(self, test_client) -> None:
+        resp = test_client.post("/predict", json={
+            "zone_id": 100,
+            "hour_ts": "2024-02-01T12:00:00",
+        })
+        assert resp.status_code == 422
+
+    def test_december_timestamp(self, test_client) -> None:
+        resp = test_client.post("/predict", json={
+            "zone_id": 1,
+            "hour_ts": "2023-12-15T12:00:00",
+        })
+        assert resp.status_code == 422
+
+    def test_response_has_metadata(self, test_client) -> None:
+        resp = test_client.post("/predict", json={
+            "zone_id": 1,
+            "hour_ts": "2024-02-01T12:00:00",
+        })
+        data = resp.json()
+        assert "metadata" in data
+        assert "latency_ms" in data["metadata"]
+        assert "request_id" in data["metadata"]
+        assert "features_used" in data["metadata"]
+
+
+class TestHealthEndpoint:
+
+    def test_health_returns_200(self, test_client) -> None:
+        resp = test_client.get("/health")
+        assert resp.status_code == 200
+
+    def test_health_includes_n_supported_zones(self, test_client) -> None:
+        data = test_client.get("/health").json()
+        assert "n_supported_zones" in data
+        assert data["n_supported_zones"] == 3
+
+    def test_health_includes_supported_range(self, test_client) -> None:
+        data = test_client.get("/health").json()
+        assert "supported_start" in data
+        assert "supported_end" in data
+
+
+class TestMetricsEndpoint:
+
+    def test_metrics_returns_text_plain(self, test_client) -> None:
+        resp = test_client.get("/metrics")
+        assert resp.status_code == 200
+        assert "text/plain" in resp.headers["content-type"]
+
+    def test_metrics_contains_prometheus_metrics(self, test_client) -> None:
+        test_client.post("/predict", json={
+            "zone_id": 1,
+            "hour_ts": "2024-02-01T12:00:00",
+        })
+        body = test_client.get("/metrics").text
+        assert "demandops_requests_total" in body
+        assert "demandops_request_latency_seconds" in body
