@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -72,3 +74,56 @@ class TestFeatureService:
         last_hour = feature_service.supported_end - timedelta(hours=1)
         result = feature_service.get_features(1, last_hour)
         assert result.supported
+
+    def test_timezone_aware_converts_to_utc(
+        self, feature_service: FeatureService
+    ) -> None:
+        """Timezone-aware timestamps must be converted to UTC, not just stripped.
+
+        2024-02-01T14:00:00+02:00 == 2024-02-01T12:00:00 UTC.
+        Both should produce the same features.
+        """
+        naive_utc = datetime(2024, 2, 1, 12, 0, 0)
+        tz_plus2 = datetime(2024, 2, 1, 14, 0, 0, tzinfo=timezone(timedelta(hours=2)))
+
+        result_naive = feature_service.get_features(1, naive_utc)
+        result_tz = feature_service.get_features(1, tz_plus2)
+
+        assert result_naive.supported
+        assert result_tz.supported
+        assert result_naive.features == result_tz.features
+
+    def test_timezone_utc_equivalent_to_naive(
+        self, feature_service: FeatureService
+    ) -> None:
+        """UTC-tagged timestamp produces same result as naive."""
+        naive = datetime(2024, 2, 1, 12, 0, 0)
+        utc_aware = datetime(2024, 2, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        result_naive = feature_service.get_features(1, naive)
+        result_utc = feature_service.get_features(1, utc_aware)
+
+        assert result_naive.features == result_utc.features
+
+    def test_mismatched_schema_raises_at_init(
+        self,
+        history_parquet_path: Path,
+        zone_universe_path: Path,
+        split_config: dict,
+        tmp_path: Path,
+    ) -> None:
+        """FeatureService must reject a schema artifact with wrong column order."""
+        bad_schema = {
+            "columns": ["zone_id", "hour_of_day"],  # wrong order/count
+            "target": "trip_count",
+        }
+        bad_path = tmp_path / "bad_schema.json"
+        bad_path.write_text(json.dumps(bad_schema))
+
+        with pytest.raises(ValueError, match="does not match"):
+            FeatureService(
+                history_path=history_parquet_path,
+                schema_path=bad_path,
+                zone_universe_path=zone_universe_path,
+                config=split_config,
+            )

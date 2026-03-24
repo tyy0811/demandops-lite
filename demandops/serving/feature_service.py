@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import polars as pl
@@ -44,6 +44,17 @@ class FeatureService:
         self.schema = json.loads(Path(schema_path).read_text())
         zone_data = json.loads(Path(zone_universe_path).read_text())
         self.zone_universe: set[int] = set(zone_data["zone_ids"])
+
+        # Use persisted feature schema to determine column order.
+        # This is the artifact saved during training — if it diverges
+        # from FEATURE_COLUMNS in code, we fail loudly at startup.
+        self._feature_columns: list[str] = self.schema["columns"]
+        if self._feature_columns != FEATURE_COLUMNS:
+            raise ValueError(
+                f"Persisted feature schema {schema_path} column order "
+                f"{self._feature_columns} does not match code constant "
+                f"FEATURE_COLUMNS {FEATURE_COLUMNS}. Retrain or update code."
+            )
 
         self._min_history_ts: datetime = self.history["hour_ts"].min()
         self._max_history_ts: datetime = self.history["hour_ts"].max()
@@ -82,10 +93,11 @@ class FeatureService:
         return self._zone_names.get(zone_id, f"Unknown Zone {zone_id}")
 
     def get_features(self, zone_id: int, hour_ts: datetime) -> FeatureResult:
-        # Normalize to naive datetime for consistent lookup (fix #15)
-        # Pydantic may parse "2024-02-01T12:00:00Z" as timezone-aware
+        # Normalize to naive UTC for consistent lookup (fix #15)
+        # Pydantic may parse "2024-02-01T12:00:00+02:00" as timezone-aware;
+        # we must convert to UTC first, then strip tzinfo for lookup.
         if hour_ts.tzinfo is not None:
-            hour_ts = hour_ts.replace(tzinfo=None)
+            hour_ts = hour_ts.astimezone(timezone.utc).replace(tzinfo=None)
 
         warnings: list[str] = []
 
@@ -136,8 +148,8 @@ class FeatureService:
             "rolling_mean_24h": rolling_mean_24h,
         }
 
-        # Verify key order matches FEATURE_COLUMNS
-        assert list(features.keys()) == FEATURE_COLUMNS
+        # Verify key order matches persisted feature schema
+        assert list(features.keys()) == self._feature_columns
 
         return FeatureResult(features=features, supported=True, warnings=warnings)
 
