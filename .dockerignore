@@ -6,6 +6,8 @@ __pycache__
 venv
 mlruns
 data/raw
+data/processed
+artifacts
 notebooks
 tests
 docs

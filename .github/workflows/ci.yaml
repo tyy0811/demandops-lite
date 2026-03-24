@@ -27,7 +27,9 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint
-        run: ruff check demandops/ tests/
+        run: |
+          ruff check demandops/ tests/
+          ruff format --check demandops/ tests/
 
       - name: Test
         run: pytest tests/ -v --tb=short
