@@ -1,0 +1,63 @@
+"""FastAPI application factory."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import structlog
+import yaml
+from fastapi import FastAPI
+
+from demandops.models.registry import create_model
+from demandops.serving.feature_service import FeatureService
+from demandops.serving.middleware import RequestLoggingMiddleware
+from demandops.serving.routes import configure, router
+
+logger = structlog.get_logger()
+
+
+def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
+    config = yaml.safe_load(Path(config_path).read_text())
+    serving_cfg = config["serving"]
+
+    app = FastAPI(
+        title="demandops-lite",
+        description="Hourly taxi demand prediction API",
+        version="0.1.0",
+    )
+    app.add_middleware(RequestLoggingMiddleware)
+    app.include_router(router)
+
+    @app.on_event("startup")
+    async def startup():
+        start_time = time.time()
+
+        feature_service = FeatureService(
+            history_path=Path(serving_cfg["history_path"]),
+            schema_path=Path(serving_cfg["feature_schema_path"]),
+            zone_universe_path=Path(serving_cfg["zone_universe_path"]),
+            config=config,
+        )
+
+        # Load model (fix #4: joblib for LightGBM)
+        model_name = serving_cfg["model_name"]
+        model_config = config["models"].get(model_name, {})
+        model_params = {k: v for k, v in model_config.items() if k != "name"}
+        model = create_model(model_name, **model_params)
+
+        if model_name == "lightgbm":
+            model_path = Path(config["artifacts"]["models_dir"]) / f"{model_name}.joblib"
+            if model_path.exists():
+                model.load(model_path)
+                logger.info("model_loaded", path=str(model_path))
+            else:
+                logger.warning("model_file_not_found", path=str(model_path))
+
+        configure(app, feature_service, model, model_name, start_time)
+        logger.info("app_started", model=model_name)
+
+    return app
+
+
+app = create_app()
