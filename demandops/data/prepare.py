@@ -75,7 +75,7 @@ def engineer_features(
             return group_df.with_columns(
                 pl.col("trip_count")
                 .shift(1)
-                .rolling_mean(window_size=w, min_periods=w)
+                .rolling_mean(window_size=w, min_samples=w)
                 .alias(f"rolling_mean_{w}h")
             )
 
