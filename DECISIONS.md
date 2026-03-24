@@ -93,3 +93,19 @@ Rationale behind the key technical choices in demandops-lite V1.
 **Decision:** `FeatureService.get_features()` converts timezone-aware timestamps to UTC before stripping `tzinfo` for lookup.
 
 **Why:** Pydantic may parse `"2024-02-01T12:00:00+02:00"` as timezone-aware. Simply stripping `tzinfo` (`.replace(tzinfo=None)`) would treat it as 12:00 UTC instead of 10:00 UTC, producing wrong lag features. `astimezone(UTC)` first, then strip, gives correct behavior.
+
+## 15. Frozen Zone Universe
+
+**Decision:** The zone universe is determined once during `prepare()` from the distinct pickup location IDs in the raw data, saved to `zone_universe.json`, and treated as immutable at serving time. Requests for zone IDs not in the universe are rejected with 422.
+
+**Why:** The dense grid and all lag features are built over a fixed set of zones. A zone that wasn't in the training data has no history, no lag values, and no slot mean — any prediction for it would be meaningless. Rejecting unsupported zones with an explicit error (including the supported zone count) is more honest than returning a fallback prediction with no statistical backing. The zone universe file is the shared contract between prepare, train, and serve.
+
+**Alternative considered:** Accepting any zone_id in 1–263 and returning a global-mean fallback. Rejected because it hides a data gap behind a plausible-looking number.
+
+## 16. prometheus-client for Monitoring
+
+**Decision:** Use the official `prometheus-client` library with module-level metric definitions (Counters, Histograms, Gauges) and a `/metrics` endpoint returning `generate_latest()`.
+
+**Why:** Prometheus is the de facto standard for ML serving observability. Module-level metric definitions are the library's intended pattern — they register once on the default `CollectorRegistry` at import time. The `/metrics` endpoint returns the standard text exposition format, compatible with any Prometheus scraper without additional infrastructure. Metrics cover: request counts by endpoint/status, prediction latency, prediction value distribution, rejection reasons, error counts, and model/history load status gauges.
+
+**Alternative considered:** OpenTelemetry. Rejected for V1 because it adds complexity (exporters, collectors, SDK configuration) without a clear benefit when the deployment target is a single-node Docker container with a Prometheus scrape.

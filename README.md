@@ -4,6 +4,20 @@ End-to-end demand prediction pipeline for NYC taxi data — from data contracts 
 
 Demonstrates ML engineering best practices on CPU: DuckDB for aggregation, Polars for feature engineering, LightGBM for prediction, FastAPI for serving, and Pandera for validation at every pipeline boundary.
 
+## Benchmark Results
+
+**261 zones | 375,840 rows | 9 features | Test: Feb 15–29, 2024**
+
+| Model | MAE | RMSE | sMAPE | vs Slot Mean |
+|-------|-----|------|-------|-------------|
+| Slot Mean | 3.40 | 12.12 | 108.8% | — |
+| Seasonal Naive | 4.01 | 13.99 | 99.3% | +18.1% |
+| **LightGBM** | **2.90** | **9.37** | 138.6% | **-14.6%** |
+
+LightGBM reduces MAE by 14.6% vs slot mean and 27.7% vs seasonal naive. 1.4% of predictions clipped to zero. Lag features (1h, 168h, 24h) dominate feature importance. Hardest zones: JFK Airport (MAE 29.9), Midtown Center (MAE 25.0).
+
+Full report: [`docs/benchmark_report.md`](docs/benchmark_report.md)
+
 ## Quick Start
 
 ```bash
