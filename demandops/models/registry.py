@@ -31,16 +31,16 @@ MODEL_REGISTRY: dict[str, type[DemandModel]] = {}
 
 def register_model(name: str):
     """Decorator to register a model class."""
+
     def wrapper(cls: type[DemandModel]):
         MODEL_REGISTRY[name] = cls
         return cls
+
     return wrapper
 
 
 def create_model(name: str, **kwargs: Any) -> DemandModel:
     """Factory: create a model by name."""
     if name not in MODEL_REGISTRY:
-        raise ValueError(
-            f"Unknown model: {name}. Available: {list(MODEL_REGISTRY.keys())}"
-        )
+        raise ValueError(f"Unknown model: {name}. Available: {list(MODEL_REGISTRY.keys())}")
     return MODEL_REGISTRY[name](**kwargs)

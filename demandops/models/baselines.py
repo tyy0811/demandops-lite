@@ -39,9 +39,7 @@ class HistoricalSlotMean(DemandModel):
             slot_sums[key] += y[i]
             slot_counts[key] += 1
 
-        self._slot_means = {
-            k: slot_sums[k] / slot_counts[k] for k in slot_sums
-        }
+        self._slot_means = {k: slot_sums[k] / slot_counts[k] for k in slot_sums}
         self._global_mean = float(np.mean(y)) if len(y) > 0 else 0.0
 
     def predict(self, X: np.ndarray) -> np.ndarray:

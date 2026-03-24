@@ -43,7 +43,6 @@ def features_parquet(tmp_path: Path, features_df: pl.DataFrame) -> Path:
 
 
 class TestTrainAll:
-
     def test_trains_all_models(
         self, features_parquet: Path, training_config: dict, tmp_path: Path
     ) -> None:
@@ -98,7 +97,6 @@ class TestTrainAll:
 
 
 class TestLoadTrainedModels:
-
     def test_loads_from_artifacts(
         self, features_parquet: Path, training_config: dict, tmp_path: Path
     ) -> None:
@@ -125,6 +123,7 @@ class TestLoadTrainedModels:
 
         # LightGBM predictions should match the trained model
         import numpy as np
+
         rng = np.random.RandomState(99)
         X_test = rng.rand(5, 9)
         trained_preds = train_results["lightgbm"]["model"].predict(X_test)
@@ -147,7 +146,6 @@ class TestLoadTrainedModels:
 
 
 class TestEvaluateAll:
-
     def test_produces_report_with_all_models(
         self, features_parquet: Path, training_config: dict, tmp_path: Path
     ) -> None:
@@ -174,7 +172,9 @@ class TestEvaluateAll:
 
         assert "model_comparison" in report
         assert set(report["model_comparison"].keys()) == {
-            "slot_mean", "seasonal_naive", "lightgbm",
+            "slot_mean",
+            "seasonal_naive",
+            "lightgbm",
         }
         for metrics in report["model_comparison"].values():
             assert "mae" in metrics

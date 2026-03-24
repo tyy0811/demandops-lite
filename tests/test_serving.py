@@ -24,12 +24,14 @@ def _reset_prometheus_metrics():
 
 
 class TestPredictEndpoint:
-
     def test_valid_request(self, test_client) -> None:
-        resp = test_client.post("/predict", json={
-            "zone_id": 1,
-            "hour_ts": "2024-02-01T12:00:00",
-        })
+        resp = test_client.post(
+            "/predict",
+            json={
+                "zone_id": 1,
+                "hour_ts": "2024-02-01T12:00:00",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["zone_id"] == 1
@@ -37,24 +39,33 @@ class TestPredictEndpoint:
         assert data["model_name"] == "lightgbm"
 
     def test_unsupported_zone(self, test_client) -> None:
-        resp = test_client.post("/predict", json={
-            "zone_id": 100,
-            "hour_ts": "2024-02-01T12:00:00",
-        })
+        resp = test_client.post(
+            "/predict",
+            json={
+                "zone_id": 100,
+                "hour_ts": "2024-02-01T12:00:00",
+            },
+        )
         assert resp.status_code == 422
 
     def test_december_timestamp(self, test_client) -> None:
-        resp = test_client.post("/predict", json={
-            "zone_id": 1,
-            "hour_ts": "2023-12-15T12:00:00",
-        })
+        resp = test_client.post(
+            "/predict",
+            json={
+                "zone_id": 1,
+                "hour_ts": "2023-12-15T12:00:00",
+            },
+        )
         assert resp.status_code == 422
 
     def test_response_has_metadata(self, test_client) -> None:
-        resp = test_client.post("/predict", json={
-            "zone_id": 1,
-            "hour_ts": "2024-02-01T12:00:00",
-        })
+        resp = test_client.post(
+            "/predict",
+            json={
+                "zone_id": 1,
+                "hour_ts": "2024-02-01T12:00:00",
+            },
+        )
         data = resp.json()
         assert "metadata" in data
         assert "latency_ms" in data["metadata"]
@@ -63,7 +74,6 @@ class TestPredictEndpoint:
 
 
 class TestHealthEndpoint:
-
     def test_health_returns_200(self, test_client) -> None:
         resp = test_client.get("/health")
         assert resp.status_code == 200
@@ -80,24 +90,25 @@ class TestHealthEndpoint:
 
 
 class TestMetricsEndpoint:
-
     def test_metrics_returns_text_plain(self, test_client) -> None:
         resp = test_client.get("/metrics")
         assert resp.status_code == 200
         assert "text/plain" in resp.headers["content-type"]
 
     def test_metrics_contains_prometheus_metrics(self, test_client) -> None:
-        test_client.post("/predict", json={
-            "zone_id": 1,
-            "hour_ts": "2024-02-01T12:00:00",
-        })
+        test_client.post(
+            "/predict",
+            json={
+                "zone_id": 1,
+                "hour_ts": "2024-02-01T12:00:00",
+            },
+        )
         body = test_client.get("/metrics").text
         assert "demandops_requests_total" in body
         assert "demandops_request_latency_seconds" in body
 
 
 class TestDegradedHealth:
-
     @pytest.fixture
     def degraded_client_no_model(self, mock_feature_service):
         """App with feature service but no model artifact loaded."""
@@ -108,7 +119,11 @@ class TestDegradedHealth:
         app = FastAPI()
         app.include_router(router)
         configure(
-            app, mock_feature_service, None, "lightgbm", time.time(),
+            app,
+            mock_feature_service,
+            None,
+            "lightgbm",
+            time.time(),
             model_artifact_loaded=False,
         )
         return TestClient(app)
@@ -123,7 +138,11 @@ class TestDegradedHealth:
         app = FastAPI()
         app.include_router(router)
         configure(
-            app, None, None, "lightgbm", time.time(),
+            app,
+            None,
+            None,
+            "lightgbm",
+            time.time(),
             model_artifact_loaded=False,
         )
         return TestClient(app)
@@ -162,9 +181,7 @@ class TestDegradedHealth:
         from demandops.serving.app import create_app
 
         # Write a valid config pointing at nonexistent artifacts
-        config = yaml.safe_load(
-            Path("configs/default.yaml").read_text()
-        )
+        config = yaml.safe_load(Path("configs/default.yaml").read_text())
         config["serving"]["history_path"] = str(tmp_path / "missing.parquet")
         config["serving"]["feature_schema_path"] = str(tmp_path / "missing.json")
         config["serving"]["zone_universe_path"] = str(tmp_path / "missing.json")

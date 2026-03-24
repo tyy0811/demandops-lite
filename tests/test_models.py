@@ -5,31 +5,27 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from demandops.features import (
-    IDX_DAY_OF_WEEK,
-    IDX_HOUR_OF_DAY,
-    IDX_LAG_168H,
-)
 from demandops.models.registry import create_model
 
 
 def _make_feature_array(rng: np.random.RandomState, n: int) -> np.ndarray:
     """Helper: generate a random feature array with correct column count."""
-    return np.column_stack([
-        rng.randint(0, 24, n),             # hour_of_day
-        rng.randint(0, 7, n),              # day_of_week (0=Mon, 6=Sun)
-        rng.randint(0, 2, n),              # is_weekend
-        rng.randint(1, 3, n),              # month
-        rng.randint(1, 4, n),              # zone_id
-        rng.poisson(3, n).astype(float),   # lag_1h
-        rng.poisson(3, n).astype(float),   # lag_24h
-        rng.poisson(3, n).astype(float),   # lag_168h
-        rng.poisson(3, n).astype(float),   # rolling_mean_24h
-    ]).astype(float)
+    return np.column_stack(
+        [
+            rng.randint(0, 24, n),  # hour_of_day
+            rng.randint(0, 7, n),  # day_of_week (0=Mon, 6=Sun)
+            rng.randint(0, 2, n),  # is_weekend
+            rng.randint(1, 3, n),  # month
+            rng.randint(1, 4, n),  # zone_id
+            rng.poisson(3, n).astype(float),  # lag_1h
+            rng.poisson(3, n).astype(float),  # lag_24h
+            rng.poisson(3, n).astype(float),  # lag_168h
+            rng.poisson(3, n).astype(float),  # rolling_mean_24h
+        ]
+    ).astype(float)
 
 
 class TestSlotMean:
-
     def test_predictions_non_negative(self) -> None:
         model = create_model("slot_mean")
         rng = np.random.RandomState(42)
@@ -42,11 +38,14 @@ class TestSlotMean:
     def test_predictions_are_means_of_slots(self) -> None:
         model = create_model("slot_mean")
         # 2 rows for zone=1/hour=0/dow=0 with values 4,6 → mean=5
-        X = np.array([
-            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0, zone=1
-            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0, zone=1
-            [12, 3, 0, 1, 1, 0, 0, 0, 0], # hour=12, dow=3, zone=1
-        ], dtype=float)
+        X = np.array(
+            [
+                [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0, zone=1
+                [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0, zone=1
+                [12, 3, 0, 1, 1, 0, 0, 0, 0],  # hour=12, dow=3, zone=1
+            ],
+            dtype=float,
+        )
         y = np.array([4.0, 6.0, 10.0])
         model.fit(X, y)
         pred = model.predict(np.array([[0, 0, 0, 1, 1, 0, 0, 0, 0]], dtype=float))
@@ -56,10 +55,13 @@ class TestSlotMean:
         """Regression: slot mean must key by zone_id, not just hour/dow."""
         model = create_model("slot_mean")
         # Same hour=0/dow=0 but different zones with very different demand
-        X = np.array([
-            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # zone=1, hour=0, dow=0
-            [0, 0, 0, 1, 2, 0, 0, 0, 0],  # zone=2, hour=0, dow=0
-        ], dtype=float)
+        X = np.array(
+            [
+                [0, 0, 0, 1, 1, 0, 0, 0, 0],  # zone=1, hour=0, dow=0
+                [0, 0, 0, 1, 2, 0, 0, 0, 0],  # zone=2, hour=0, dow=0
+            ],
+            dtype=float,
+        )
         y = np.array([10.0, 100.0])
         model.fit(X, y)
         preds = model.predict(X)
@@ -68,13 +70,15 @@ class TestSlotMean:
 
 
 class TestSeasonalNaive:
-
     def test_predictions_equal_lag168(self) -> None:
         model = create_model("seasonal_naive")
-        X = np.array([
-            [0, 0, 0, 1, 1, 5.0, 10.0, 42.0, 8.0],
-            [12, 3, 0, 1, 2, 3.0, 7.0, 99.0, 6.0],
-        ], dtype=float)
+        X = np.array(
+            [
+                [0, 0, 0, 1, 1, 5.0, 10.0, 42.0, 8.0],
+                [12, 3, 0, 1, 2, 3.0, 7.0, 99.0, 6.0],
+            ],
+            dtype=float,
+        )
         y = np.array([0.0, 0.0])
         model.fit(X, y)
         preds = model.predict(X)
@@ -91,7 +95,6 @@ class TestSeasonalNaive:
 
 
 class TestLightGBM:
-
     @pytest.fixture
     def trained_lgbm(self) -> tuple:
         rng = np.random.RandomState(42)
@@ -99,8 +102,11 @@ class TestLightGBM:
         y = rng.poisson(3, 200).astype(float)
 
         model = create_model(
-            "lightgbm", n_estimators=10, num_threads=1,
-            random_state=42, verbose=-1,
+            "lightgbm",
+            n_estimators=10,
+            num_threads=1,
+            random_state=42,
+            verbose=-1,
         )
         model.fit(X[:150], y[:150], eval_set=(X[150:], y[150:]))
         return model, X
@@ -120,8 +126,11 @@ class TestLightGBM:
         y = rng.uniform(-0.1, 0.5, n).clip(0)
 
         model = create_model(
-            "lightgbm", n_estimators=10, num_threads=1,
-            random_state=42, verbose=-1,
+            "lightgbm",
+            n_estimators=10,
+            num_threads=1,
+            random_state=42,
+            verbose=-1,
         )
         model.fit(X[:150], y[:150], eval_set=(X[150:], y[150:]))
         preds = model.predict(X)

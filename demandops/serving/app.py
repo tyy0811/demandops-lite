@@ -69,7 +69,11 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
             logger.error("model_load_failed", error=str(e))
 
         configure(
-            app, feature_service, model, model_name, start_time,
+            app,
+            feature_service,
+            model,
+            model_name,
+            start_time,
             model_artifact_loaded=model_artifact_loaded,
         )
         logger.info(

@@ -28,6 +28,7 @@ SEED = 42
 # Data pipeline fixtures
 # ──────────────────────────────────────────────
 
+
 @pytest.fixture
 def zone_universe() -> dict:
     """Small zone universe for testing: 3 zones."""
@@ -74,20 +75,24 @@ def dense_history_df(zone_universe: dict) -> pl.DataFrame:
                 avg_fare = float(round(10.0 + trip_count * 0.5 + rng.random() * 5, 2))
                 avg_distance = float(round(1.0 + rng.random() * 3, 2))
 
-            rows.append({
-                "zone_id": zone_id,
-                "zone_name": f"Zone {zone_id}",
-                "hour_ts": hour_ts,
-                "trip_count": trip_count,
-                "avg_fare": avg_fare,
-                "avg_distance": avg_distance,
-            })
+            rows.append(
+                {
+                    "zone_id": zone_id,
+                    "zone_name": f"Zone {zone_id}",
+                    "hour_ts": hour_ts,
+                    "trip_count": trip_count,
+                    "avg_fare": avg_fare,
+                    "avg_distance": avg_distance,
+                }
+            )
 
-    return pl.DataFrame(rows).cast({
-        "zone_id": pl.Int64,
-        "trip_count": pl.Int64,
-        "hour_ts": pl.Datetime("us"),
-    })
+    return pl.DataFrame(rows).cast(
+        {
+            "zone_id": pl.Int64,
+            "trip_count": pl.Int64,
+            "hour_ts": pl.Datetime("us"),
+        }
+    )
 
 
 @pytest.fixture
@@ -102,9 +107,7 @@ def features_df(dense_history_df: pl.DataFrame) -> pl.DataFrame:
     df = df.filter(pl.col("hour_ts") >= datetime(2024, 1, 1))
 
     # Drop rows with null lags (warm-up period)
-    df = df.drop_nulls(
-        subset=["lag_1h", "lag_24h", "lag_168h", "rolling_mean_24h"]
-    )
+    df = df.drop_nulls(subset=["lag_1h", "lag_24h", "lag_168h", "rolling_mean_24h"])
 
     return df
 
@@ -135,9 +138,11 @@ def history_parquet_path(tmp_path: Path, dense_history_df: pl.DataFrame) -> Path
 # Day 1 pytest collection succeeds before serving code exists.
 # ──────────────────────────────────────────────
 
+
 @pytest.fixture
 def feature_schema_path(tmp_path: Path) -> Path:
     from demandops.features import FEATURE_COLUMNS, TARGET_COLUMN
+
     schema = {
         "columns": FEATURE_COLUMNS,
         "target": TARGET_COLUMN,
@@ -157,6 +162,7 @@ def feature_service(
     split_config: dict,
 ):
     from demandops.serving.feature_service import FeatureService
+
     return FeatureService(
         history_path=history_parquet_path,
         schema_path=feature_schema_path,
@@ -186,12 +192,14 @@ def mock_feature_service(zone_universe: dict) -> MagicMock:
     def get_features(zone_id, hour_ts):
         if zone_id not in svc.zone_universe:
             return FeatureResult(
-                features=None, supported=False,
+                features=None,
+                supported=False,
                 warnings=[f"zone_id {zone_id} not in supported zone universe"],
             )
         if hour_ts < svc.supported_start or hour_ts >= svc.supported_end:
             return FeatureResult(
-                features=None, supported=False,
+                features=None,
+                supported=False,
                 warnings=["hour_ts outside supported range"],
             )
         return FeatureResult(
@@ -224,10 +232,15 @@ def mock_model() -> MagicMock:
 def test_app(mock_feature_service, mock_model):
     from fastapi import FastAPI
     from demandops.serving.routes import configure, router
+
     app = FastAPI()
     app.include_router(router)
     configure(
-        app, mock_feature_service, mock_model, "lightgbm", time.time(),
+        app,
+        mock_feature_service,
+        mock_model,
+        "lightgbm",
+        time.time(),
         model_artifact_loaded=True,
     )
     return app
@@ -236,4 +249,5 @@ def test_app(mock_feature_service, mock_model):
 @pytest.fixture
 def test_client(test_app):
     from fastapi.testclient import TestClient
+
     return TestClient(test_app)

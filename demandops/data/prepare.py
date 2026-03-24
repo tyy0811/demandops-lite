@@ -58,11 +58,7 @@ def engineer_features(
     # Lag features (per zone, using shift on sorted data)
     for lag in lag_hours:
         df = df.with_columns(
-            pl.col("trip_count")
-            .shift(lag)
-            .over("zone_id")
-            .cast(pl.Float64)
-            .alias(f"lag_{lag}h")
+            pl.col("trip_count").shift(lag).over("zone_id").cast(pl.Float64).alias(f"lag_{lag}h")
         )
 
     # Rolling mean (fix #2: group_by.map_groups for unambiguous per-group rolling)
@@ -71,6 +67,7 @@ def engineer_features(
     # behavior — rolling is a window function that operates on physical row
     # positions, and .over() partitioning doesn't guarantee correct boundaries.
     for window in rolling_windows:
+
         def _add_rolling(group_df: pl.DataFrame, w: int = window) -> pl.DataFrame:
             return group_df.with_columns(
                 pl.col("trip_count")
@@ -107,10 +104,13 @@ def prepare(
     parquet_files = [str(raw_dir / f"yellow_tripdata_{m}.parquet") for m in months]
     logger.info("loading_raw_data", files=parquet_files)
 
-    con.execute("""
+    con.execute(
+        """
         CREATE OR REPLACE TABLE raw_trips AS
         SELECT * FROM read_parquet(?)
-    """, [parquet_files])
+    """,
+        [parquet_files],
+    )
 
     raw_count = con.execute("SELECT COUNT(*) FROM raw_trips").fetchone()[0]
     logger.info("raw_rows_loaded", count=raw_count)

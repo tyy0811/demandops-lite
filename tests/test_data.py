@@ -15,7 +15,6 @@ from demandops.data.splits import temporal_split
 
 
 class TestHourlyHistorySchema:
-
     def test_schema_validates(self, dense_history_df: pl.DataFrame) -> None:
         HourlyHistorySchema.validate(dense_history_df)
 
@@ -40,33 +39,23 @@ class TestHourlyHistorySchema:
 
 
 class TestGridCompleteness:
-
-    def test_row_count(
-        self, dense_history_df: pl.DataFrame, zone_universe: dict
-    ) -> None:
+    def test_row_count(self, dense_history_df: pl.DataFrame, zone_universe: dict) -> None:
         n_zones = zone_universe["n_zones"]
         n_unique_hours = dense_history_df["hour_ts"].n_unique()
         expected = n_zones * n_unique_hours
         assert len(dense_history_df) == expected
 
-    def test_every_zone_has_every_hour(
-        self, dense_history_df: pl.DataFrame
-    ) -> None:
+    def test_every_zone_has_every_hour(self, dense_history_df: pl.DataFrame) -> None:
         counts = dense_history_df.group_by("zone_id").len()
         unique_counts = counts["len"].unique()
         assert len(unique_counts) == 1
 
-    def test_no_duplicate_zone_hour_pairs(
-        self, dense_history_df: pl.DataFrame
-    ) -> None:
-        n_unique = dense_history_df.select(
-            pl.struct("zone_id", "hour_ts").n_unique()
-        ).item()
+    def test_no_duplicate_zone_hour_pairs(self, dense_history_df: pl.DataFrame) -> None:
+        n_unique = dense_history_df.select(pl.struct("zone_id", "hour_ts").n_unique()).item()
         assert n_unique == len(dense_history_df)
 
 
 class TestFeatureSchema:
-
     def test_schema_validates(self, features_df: pl.DataFrame) -> None:
         FeatureSchema.validate(features_df)
 
@@ -90,99 +79,71 @@ class TestFeatureSchema:
         weekday_rows = features_df.filter(pl.col("is_weekend") == 0)
         assert weekday_rows["day_of_week"].max() <= 4
 
-    def test_weekday_matches_python_convention(
-        self, features_df: pl.DataFrame
-    ) -> None:
+    def test_weekday_matches_python_convention(self, features_df: pl.DataFrame) -> None:
         """Spot-check: 2024-01-01 is a Monday → day_of_week should be 0."""
         monday_row = features_df.filter(
-            (pl.col("hour_ts") == datetime(2024, 1, 1, 12, 0, 0))
-            & (pl.col("zone_id") == 1)
+            (pl.col("hour_ts") == datetime(2024, 1, 1, 12, 0, 0)) & (pl.col("zone_id") == 1)
         )
         if len(monday_row) > 0:
             assert monday_row["day_of_week"].item() == 0  # Monday = 0
 
     def test_validates_with_narrow_dtypes(self, features_df: pl.DataFrame) -> None:
         """Schema coercion handles Polars' Int8 for hour_of_day/day_of_week/month."""
-        df = features_df.cast({
-            "zone_id": pl.Int32,
-            "trip_count": pl.Int32,
-            "hour_of_day": pl.Int8,
-            "day_of_week": pl.Int8,
-            "is_weekend": pl.Int8,
-            "month": pl.Int8,
-        })
+        df = features_df.cast(
+            {
+                "zone_id": pl.Int32,
+                "trip_count": pl.Int32,
+                "hour_of_day": pl.Int8,
+                "day_of_week": pl.Int8,
+                "is_weekend": pl.Int8,
+                "month": pl.Int8,
+            }
+        )
         FeatureSchema.validate(df)
 
 
 class TestTemporalSplit:
-
-    def test_no_overlap_no_gap(
-        self, features_df: pl.DataFrame, split_config: dict
-    ) -> None:
-        train, val, test = temporal_split(
-            features_df, **split_config["split"]
-        )
+    def test_no_overlap_no_gap(self, features_df: pl.DataFrame, split_config: dict) -> None:
+        train, val, test = temporal_split(features_df, **split_config["split"])
         # Exactly 1 hour gap between last train and first val timestamp
         gap = val["hour_ts"].min() - train["hour_ts"].max()
         assert gap == timedelta(hours=1)
         gap2 = test["hour_ts"].min() - val["hour_ts"].max()
         assert gap2 == timedelta(hours=1)
 
-    def test_half_open_boundaries(
-        self, features_df: pl.DataFrame, split_config: dict
-    ) -> None:
-        train, val, test = temporal_split(
-            features_df, **split_config["split"]
-        )
+    def test_half_open_boundaries(self, features_df: pl.DataFrame, split_config: dict) -> None:
+        train, val, test = temporal_split(features_df, **split_config["split"])
         assert train["hour_ts"].max() < datetime(2024, 2, 1)
         assert val["hour_ts"].min() >= datetime(2024, 2, 1)
         assert val["hour_ts"].max() < datetime(2024, 2, 15)
         assert test["hour_ts"].min() >= datetime(2024, 2, 15)
         assert test["hour_ts"].max() < datetime(2024, 3, 1)
 
-    def test_chronological_order(
-        self, features_df: pl.DataFrame, split_config: dict
-    ) -> None:
-        train, val, test = temporal_split(
-            features_df, **split_config["split"]
-        )
+    def test_chronological_order(self, features_df: pl.DataFrame, split_config: dict) -> None:
+        train, val, test = temporal_split(features_df, **split_config["split"])
         assert train["hour_ts"].max() < val["hour_ts"].min()
         assert val["hour_ts"].max() < test["hour_ts"].min()
 
-    def test_no_december_in_any_split(
-        self, features_df: pl.DataFrame, split_config: dict
-    ) -> None:
-        train, val, test = temporal_split(
-            features_df, **split_config["split"]
-        )
+    def test_no_december_in_any_split(self, features_df: pl.DataFrame, split_config: dict) -> None:
+        train, val, test = temporal_split(features_df, **split_config["split"])
         for name, split in [("train", train), ("val", val), ("test", test)]:
             dec = split.filter(pl.col("hour_ts") < datetime(2024, 1, 1))
             assert len(dec) == 0, f"{name} contains December rows"
 
-    def test_test_includes_feb_29(
-        self, features_df: pl.DataFrame, split_config: dict
-    ) -> None:
-        _, _, test = temporal_split(
-            features_df, **split_config["split"]
-        )
+    def test_test_includes_feb_29(self, features_df: pl.DataFrame, split_config: dict) -> None:
+        _, _, test = temporal_split(features_df, **split_config["split"])
         feb29 = test.filter(
-            (pl.col("hour_ts").dt.month() == 2)
-            & (pl.col("hour_ts").dt.day() == 29)
+            (pl.col("hour_ts").dt.month() == 2) & (pl.col("hour_ts").dt.day() == 29)
         )
         assert len(feb29) > 0
 
-    def test_splits_cover_all_data(
-        self, features_df: pl.DataFrame, split_config: dict
-    ) -> None:
-        train, val, test = temporal_split(
-            features_df, **split_config["split"]
-        )
+    def test_splits_cover_all_data(self, features_df: pl.DataFrame, split_config: dict) -> None:
+        train, val, test = temporal_split(features_df, **split_config["split"])
         total = len(train) + len(val) + len(test)
         assert total == len(features_df)
 
 
 class TestAtomicDownload:
-
     def test_partial_download_leaves_no_file(self, tmp_path: Path) -> None:
         """Interrupted download must not leave a partial destination file."""
         from demandops.data.download import _atomic_download

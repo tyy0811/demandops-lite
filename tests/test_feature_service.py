@@ -12,7 +12,6 @@ from demandops.serving.feature_service import FeatureService
 
 
 class TestFeatureService:
-
     def test_valid_zone_and_timestamp(self, feature_service: FeatureService) -> None:
         result = feature_service.get_features(1, datetime(2024, 2, 1, 12, 0))
         assert result.supported
@@ -25,22 +24,16 @@ class TestFeatureService:
         assert result.features is None
         assert any("zone universe" in w for w in result.warnings)
 
-    def test_zone_in_range_but_not_in_universe(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_zone_in_range_but_not_in_universe(self, feature_service: FeatureService) -> None:
         """Zone 100 is in 1-263 but not in test universe [1,2,3]."""
         result = feature_service.get_features(100, datetime(2024, 2, 1, 12, 0))
         assert not result.supported
 
-    def test_timestamp_before_supported_start(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_timestamp_before_supported_start(self, feature_service: FeatureService) -> None:
         result = feature_service.get_features(1, datetime(2023, 12, 15, 12, 0))
         assert not result.supported
 
-    def test_timestamp_at_supported_end_exclusive(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_timestamp_at_supported_end_exclusive(self, feature_service: FeatureService) -> None:
         result = feature_service.get_features(1, feature_service.supported_end)
         assert not result.supported
 
@@ -53,17 +46,14 @@ class TestFeatureService:
     def test_n_supported_zones(self, feature_service: FeatureService) -> None:
         assert feature_service.n_supported_zones == 3
 
-    def test_feature_order_matches_schema(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_feature_order_matches_schema(self, feature_service: FeatureService) -> None:
         from demandops.features import FEATURE_COLUMNS
+
         result = feature_service.get_features(1, datetime(2024, 2, 1, 12, 0))
         assert result.supported
         assert list(result.features.keys()) == FEATURE_COLUMNS
 
-    def test_weekday_matches_python_convention(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_weekday_matches_python_convention(self, feature_service: FeatureService) -> None:
         """FeatureService uses datetime.weekday() → 0=Mon.
         Monday 2024-01-01 should have day_of_week=0."""
         result = feature_service.get_features(1, datetime(2024, 1, 1, 12, 0))
@@ -75,9 +65,7 @@ class TestFeatureService:
         result = feature_service.get_features(1, last_hour)
         assert result.supported
 
-    def test_timezone_aware_converts_to_utc(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_timezone_aware_converts_to_utc(self, feature_service: FeatureService) -> None:
         """Timezone-aware timestamps must be converted to UTC, not just stripped.
 
         2024-02-01T14:00:00+02:00 == 2024-02-01T12:00:00 UTC.
@@ -93,9 +81,7 @@ class TestFeatureService:
         assert result_tz.supported
         assert result_naive.features == result_tz.features
 
-    def test_timezone_utc_equivalent_to_naive(
-        self, feature_service: FeatureService
-    ) -> None:
+    def test_timezone_utc_equivalent_to_naive(self, feature_service: FeatureService) -> None:
         """UTC-tagged timestamp produces same result as naive."""
         naive = datetime(2024, 2, 1, 12, 0, 0)
         utc_aware = datetime(2024, 2, 1, 12, 0, 0, tzinfo=timezone.utc)

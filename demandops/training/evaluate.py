@@ -31,9 +31,7 @@ def smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     mask = denom > 0
     if not mask.any():
         return 0.0
-    return float(
-        100.0 * np.mean(2 * np.abs(y_true[mask] - y_pred[mask]) / denom[mask])
-    )
+    return float(100.0 * np.mean(2 * np.abs(y_true[mask] - y_pred[mask]) / denom[mask]))
 
 
 def evaluate_model(
@@ -86,9 +84,7 @@ def evaluate_all(
 
     results = {}
     for model_name, model_info in trained_models.items():
-        results[model_name] = evaluate_model(
-            model_info["model"], X_test, y_test, model_name
-        )
+        results[model_name] = evaluate_model(model_info["model"], X_test, y_test, model_name)
 
     # Feature importance
     lgbm_info = trained_models.get("lightgbm")
@@ -122,9 +118,7 @@ def evaluate_all(
     return report
 
 
-def _per_zone_analysis(
-    test_df: pl.DataFrame, trained_models: dict
-) -> list[dict]:
+def _per_zone_analysis(test_df: pl.DataFrame, trained_models: dict) -> list[dict]:
     """Top 5 hardest zones by LightGBM MAE."""
     lgbm = trained_models.get("lightgbm")
     if not lgbm:
@@ -136,8 +130,9 @@ def _per_zone_analysis(
 
     test_with_preds = test_df.with_columns(pl.Series("pred", preds))
     zone_mae = (
-        test_with_preds
-        .with_columns((pl.col("pred") - pl.col("trip_count")).abs().alias("abs_error"))
+        test_with_preds.with_columns(
+            (pl.col("pred") - pl.col("trip_count")).abs().alias("abs_error")
+        )
         .group_by("zone_id")
         .agg(
             pl.col("zone_name").first().alias("zone_name"),
@@ -150,32 +145,22 @@ def _per_zone_analysis(
     return zone_mae.to_dicts()
 
 
-def _edge_case_analysis(
-    test_df: pl.DataFrame, trained_models: dict
-) -> dict:
+def _edge_case_analysis(test_df: pl.DataFrame, trained_models: dict) -> dict:
     """Edge-case segment analysis."""
     results = {}
 
-    zone_means = test_df.group_by("zone_id").agg(
-        pl.col("trip_count").mean().alias("mean_demand")
-    )
+    zone_means = test_df.group_by("zone_id").agg(pl.col("trip_count").mean().alias("mean_demand"))
     p10 = zone_means["mean_demand"].quantile(0.1)
     p90 = zone_means["mean_demand"].quantile(0.9)
 
-    sparse_zones = set(
-        zone_means.filter(pl.col("mean_demand") < p10)["zone_id"].to_list()
-    )
-    dense_zones = set(
-        zone_means.filter(pl.col("mean_demand") > p90)["zone_id"].to_list()
-    )
+    sparse_zones = set(zone_means.filter(pl.col("mean_demand") < p10)["zone_id"].to_list())
+    dense_zones = set(zone_means.filter(pl.col("mean_demand") > p90)["zone_id"].to_list())
 
     segments = {
         "sparse_zones": test_df.filter(pl.col("zone_id").is_in(sparse_zones)),
         "dense_zones": test_df.filter(pl.col("zone_id").is_in(dense_zones)),
         "late_night": test_df.filter(pl.col("hour_of_day").is_between(0, 5)),
-        "peak_hours": test_df.filter(
-            pl.col("hour_of_day").is_in([7, 8, 9, 17, 18, 19])
-        ),
+        "peak_hours": test_df.filter(pl.col("hour_of_day").is_in([7, 8, 9, 17, 18, 19])),
         "weekend": test_df.filter(pl.col("is_weekend") == 1),
         "weekday": test_df.filter(pl.col("is_weekend") == 0),
         "zero_demand": test_df.filter(pl.col("trip_count") == 0),

@@ -103,13 +103,15 @@ class FeatureService:
 
         if zone_id not in self.zone_universe:
             return FeatureResult(
-                features=None, supported=False,
+                features=None,
+                supported=False,
                 warnings=[f"zone_id {zone_id} not in supported zone universe"],
             )
 
         if hour_ts < self.supported_start or hour_ts >= self.supported_end:
             return FeatureResult(
-                features=None, supported=False,
+                features=None,
+                supported=False,
                 warnings=[
                     f"hour_ts {hour_ts.isoformat()} outside supported range "
                     f"[{self.supported_start.isoformat()}, "
@@ -131,9 +133,7 @@ class FeatureService:
             val = self._get_trip_count(zone_id, hour_ts - timedelta(hours=offset))
             if val is not None:
                 rolling_vals.append(val)
-        rolling_mean_24h = (
-            sum(rolling_vals) / len(rolling_vals) if rolling_vals else 0.0
-        )
+        rolling_mean_24h = sum(rolling_vals) / len(rolling_vals) if rolling_vals else 0.0
 
         # Build features dict in FEATURE_COLUMNS order
         features = {

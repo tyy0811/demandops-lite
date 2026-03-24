@@ -68,9 +68,7 @@ async def predict(body: PredictRequest, request: Request):
             )
             REJECTION_COUNT.labels(reason=reason).inc()
             REQUEST_COUNT.labels(endpoint="/predict", status="422").inc()
-            REQUEST_LATENCY.labels(endpoint="/predict").observe(
-                time.perf_counter() - start
-            )
+            REQUEST_LATENCY.labels(endpoint="/predict").observe(time.perf_counter() - start)
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -90,9 +88,7 @@ async def predict(body: PredictRequest, request: Request):
         PREDICTION_COUNT.inc()
         PREDICTION_VALUE.observe(predicted_count)
         REQUEST_COUNT.labels(endpoint="/predict", status="200").inc()
-        REQUEST_LATENCY.labels(endpoint="/predict").observe(
-            time.perf_counter() - start
-        )
+        REQUEST_LATENCY.labels(endpoint="/predict").observe(time.perf_counter() - start)
 
         return PredictResponse(
             zone_id=body.zone_id,
@@ -113,9 +109,7 @@ async def predict(body: PredictRequest, request: Request):
     except Exception as e:
         ERROR_COUNT.inc()
         REQUEST_COUNT.labels(endpoint="/predict", status="500").inc()
-        REQUEST_LATENCY.labels(endpoint="/predict").observe(
-            time.perf_counter() - start
-        )
+        REQUEST_LATENCY.labels(endpoint="/predict").observe(time.perf_counter() - start)
         logger.error("prediction_error", error=str(e), request_id=request_id)
         raise HTTPException(status_code=500, detail=str(e))
 
