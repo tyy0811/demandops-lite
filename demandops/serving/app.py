@@ -32,39 +32,52 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
     @app.on_event("startup")
     async def startup():
         start_time = time.time()
-
-        feature_service = FeatureService(
-            history_path=Path(serving_cfg["history_path"]),
-            schema_path=Path(serving_cfg["feature_schema_path"]),
-            zone_universe_path=Path(serving_cfg["zone_universe_path"]),
-            config=config,
-        )
-
-        # Load model (fix #4: joblib for LightGBM)
         model_name = serving_cfg["model_name"]
-        model_config = config["models"].get(model_name, {})
-        model_params = {k: v for k, v in model_config.items() if k != "name"}
+        feature_service = None
         model = None
         model_artifact_loaded = False
 
-        if model_name == "lightgbm":
-            model_path = Path(config["artifacts"]["models_dir"]) / f"{model_name}.joblib"
-            if model_path.exists():
-                model = create_model(model_name, **model_params)
-                model.load(model_path)
-                model_artifact_loaded = True
-                logger.info("model_loaded", path=str(model_path))
+        # Load feature service — graceful degradation on missing artifacts
+        try:
+            feature_service = FeatureService(
+                history_path=Path(serving_cfg["history_path"]),
+                schema_path=Path(serving_cfg["feature_schema_path"]),
+                zone_universe_path=Path(serving_cfg["zone_universe_path"]),
+                config=config,
+            )
+        except Exception as e:
+            logger.error("feature_service_failed", error=str(e))
+
+        # Load model (fix #4: joblib for LightGBM)
+        model_config = config["models"].get(model_name, {})
+        model_params = {k: v for k, v in model_config.items() if k != "name"}
+
+        try:
+            if model_name == "lightgbm":
+                model_path = Path(config["artifacts"]["models_dir"]) / f"{model_name}.joblib"
+                if model_path.exists():
+                    model = create_model(model_name, **model_params)
+                    model.load(model_path)
+                    model_artifact_loaded = True
+                    logger.info("model_loaded", path=str(model_path))
+                else:
+                    logger.warning("model_file_not_found", path=str(model_path))
             else:
-                logger.warning("model_file_not_found", path=str(model_path))
-        else:
-            model = create_model(model_name, **model_params)
-            model_artifact_loaded = True
+                model = create_model(model_name, **model_params)
+                model_artifact_loaded = True
+        except Exception as e:
+            logger.error("model_load_failed", error=str(e))
 
         configure(
             app, feature_service, model, model_name, start_time,
             model_artifact_loaded=model_artifact_loaded,
         )
-        logger.info("app_started", model=model_name, artifact_loaded=model_artifact_loaded)
+        logger.info(
+            "app_started",
+            model=model_name,
+            artifact_loaded=model_artifact_loaded,
+            history_loaded=feature_service is not None,
+        )
 
     return app
 

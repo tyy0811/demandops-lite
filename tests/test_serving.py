@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 from prometheus_client import REGISTRY
@@ -153,3 +154,31 @@ class TestDegradedHealth:
         assert data["status"] == "healthy"
         assert data["model_loaded"] is True
         assert data["history_loaded"] is True
+
+    def test_create_app_missing_artifacts_enters_degraded(self, tmp_path) -> None:
+        """Real create_app() with missing serving artifacts starts degraded."""
+        import yaml
+        from fastapi.testclient import TestClient
+        from demandops.serving.app import create_app
+
+        # Write a valid config pointing at nonexistent artifacts
+        config = yaml.safe_load(
+            Path("configs/default.yaml").read_text()
+        )
+        config["serving"]["history_path"] = str(tmp_path / "missing.parquet")
+        config["serving"]["feature_schema_path"] = str(tmp_path / "missing.json")
+        config["serving"]["zone_universe_path"] = str(tmp_path / "missing.json")
+        config["artifacts"]["models_dir"] = str(tmp_path / "no_models")
+
+        config_path = tmp_path / "test_config.yaml"
+        config_path.write_text(yaml.dump(config))
+
+        app = create_app(config_path=str(config_path))
+        # Use context manager to ensure startup/shutdown lifecycle runs
+        with TestClient(app) as client:
+            resp = client.get("/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "degraded"
+            assert data["model_loaded"] is False
+            assert data["history_loaded"] is False
