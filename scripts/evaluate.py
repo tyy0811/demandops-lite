@@ -1,21 +1,24 @@
-"""Script entrypoint for evaluation."""
+"""Script entrypoint for evaluation.
+
+Loads trained model artifacts from disk (does not retrain).
+Run `make train` first to produce artifacts.
+"""
 
 from pathlib import Path
 
 import yaml
 
 from demandops.training.evaluate import evaluate_all
-from demandops.training.train import train_all
+from demandops.training.train import load_trained_models
 
 
 def main() -> None:
     config = yaml.safe_load(Path("configs/default.yaml").read_text())
 
-    trained = train_all(
+    trained = load_trained_models(
         features_path=Path(config["data"]["processed_dir"]) / "features.parquet",
         config=config,
         models_dir=Path(config["artifacts"]["models_dir"]),
-        feature_schema_path=Path(config["artifacts"]["feature_schema_path"]),
     )
 
     report = evaluate_all(

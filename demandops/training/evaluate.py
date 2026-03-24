@@ -140,6 +140,7 @@ def _per_zone_analysis(
         .with_columns((pl.col("pred") - pl.col("trip_count")).abs().alias("abs_error"))
         .group_by("zone_id")
         .agg(
+            pl.col("zone_name").first().alias("zone_name"),
             pl.col("abs_error").mean().alias("mae"),
             pl.col("trip_count").mean().alias("mean_demand"),
         )

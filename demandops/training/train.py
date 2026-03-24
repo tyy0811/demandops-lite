@@ -107,3 +107,43 @@ def train_all(
         )
         results[model_name] = result
     return results
+
+
+def load_trained_models(
+    features_path: Path,
+    config: dict,
+    models_dir: Path,
+) -> dict[str, Any]:
+    """Load trained models from saved artifacts.
+
+    LightGBM: loaded from joblib file (no retraining).
+    Baselines: re-fit from training split (stateless — no persistent artifact).
+    """
+    df = pl.read_parquet(features_path)
+    train, _, _ = split_from_config(df, config)
+
+    X_train = train.select(FEATURE_COLUMNS).to_numpy()
+    y_train = train[TARGET_COLUMN].to_numpy().astype(float)
+
+    results = {}
+    for model_name in config["models"]:
+        model_config = config["models"].get(model_name, {})
+        model_params = {k: v for k, v in model_config.items() if k != "name"}
+        model = create_model(model_name, **model_params)
+
+        if model_name == "lightgbm":
+            model_path = models_dir / f"{model_name}.joblib"
+            if not model_path.exists():
+                raise FileNotFoundError(
+                    f"Model artifact not found: {model_path}. Run `make train` first."
+                )
+            model.load(model_path)
+            logger.info("model_loaded_from_artifact", path=str(model_path))
+        else:
+            # Baselines are stateless — re-fit from training split
+            model.fit(X_train, y_train)
+            logger.info("baseline_refit", model=model_name)
+
+        results[model_name] = {"model_name": model_name, "model": model}
+
+    return results
