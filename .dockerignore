@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+venv
+mlruns
+data/raw
+notebooks
+tests
+docs
+.github
+*.md
+!README.md

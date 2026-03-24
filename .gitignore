@@ -1,0 +1,42 @@
+# Data
+data/raw/*.parquet
+data/processed/*.parquet
+
+# Artifacts
+artifacts/models/*.txt
+artifacts/models/*.bin
+artifacts/models/*.joblib
+artifacts/models/feature_schema.json
+artifacts/zone_universe.json
+artifacts/reports/*.json
+
+# MLflow
+mlruns/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
