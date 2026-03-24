@@ -7,15 +7,19 @@ prepare:
 	.venv/bin/python scripts/prepare_data.py
 
 train:
+	@test -f scripts/train.py || { echo "ERROR: scripts/train.py not yet implemented (Day 2)"; exit 1; }
 	.venv/bin/python scripts/train.py
 
 evaluate:
+	@test -f scripts/evaluate.py || { echo "ERROR: scripts/evaluate.py not yet implemented (Day 2)"; exit 1; }
 	.venv/bin/python scripts/evaluate.py
 
 benchmark:
+	@test -f scripts/benchmark.py || { echo "ERROR: scripts/benchmark.py not yet implemented (Day 4)"; exit 1; }
 	.venv/bin/python scripts/benchmark.py
 
 serve:
+	@.venv/bin/python -c "import demandops.serving.app" 2>/dev/null || { echo "ERROR: demandops.serving.app not yet implemented (Day 3)"; exit 1; }
 	.venv/bin/uvicorn demandops.serving.app:app --host 0.0.0.0 --port 8001 --reload
 
 test:
