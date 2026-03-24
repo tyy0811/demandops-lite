@@ -41,16 +41,30 @@ class TestSlotMean:
 
     def test_predictions_are_means_of_slots(self) -> None:
         model = create_model("slot_mean")
-        # 2 rows for hour=0/dow=0 with values 4,6 → mean=5
+        # 2 rows for zone=1/hour=0/dow=0 with values 4,6 → mean=5
         X = np.array([
-            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0
-            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0
-            [12, 3, 0, 1, 1, 0, 0, 0, 0], # hour=12, dow=3
+            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0, zone=1
+            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # hour=0, dow=0, zone=1
+            [12, 3, 0, 1, 1, 0, 0, 0, 0], # hour=12, dow=3, zone=1
         ], dtype=float)
         y = np.array([4.0, 6.0, 10.0])
         model.fit(X, y)
         pred = model.predict(np.array([[0, 0, 0, 1, 1, 0, 0, 0, 0]], dtype=float))
         assert abs(pred[0] - 5.0) < 1e-6
+
+    def test_different_zones_produce_different_predictions(self) -> None:
+        """Regression: slot mean must key by zone_id, not just hour/dow."""
+        model = create_model("slot_mean")
+        # Same hour=0/dow=0 but different zones with very different demand
+        X = np.array([
+            [0, 0, 0, 1, 1, 0, 0, 0, 0],  # zone=1, hour=0, dow=0
+            [0, 0, 0, 1, 2, 0, 0, 0, 0],  # zone=2, hour=0, dow=0
+        ], dtype=float)
+        y = np.array([10.0, 100.0])
+        model.fit(X, y)
+        preds = model.predict(X)
+        assert abs(preds[0] - 10.0) < 1e-6, f"Zone 1 prediction should be 10, got {preds[0]}"
+        assert abs(preds[1] - 100.0) < 1e-6, f"Zone 2 prediction should be 100, got {preds[1]}"
 
 
 class TestSeasonalNaive:

@@ -7,29 +7,35 @@ from typing import Any
 
 import numpy as np
 
-from demandops.features import IDX_DAY_OF_WEEK, IDX_HOUR_OF_DAY, IDX_LAG_168H
+from demandops.features import IDX_DAY_OF_WEEK, IDX_HOUR_OF_DAY, IDX_LAG_168H, IDX_ZONE_ID
 from demandops.models.registry import DemandModel, register_model
 
 
 @register_model("slot_mean")
 class HistoricalSlotMean(DemandModel):
-    """Predict the historical mean for each (hour_of_day, day_of_week) slot.
+    """Predict the historical mean for each (zone_id, hour_of_day, day_of_week) slot.
 
-    Predictions are naturally non-negative (mean of non-negative counts).
+    Keyed per zone so that zones with different demand levels produce
+    different predictions at the same time slot. Predictions are naturally
+    non-negative (mean of non-negative counts).
     """
 
     name = "slot_mean"
 
     def __init__(self, **kwargs: Any) -> None:
-        self._slot_means: dict[tuple[int, int], float] = {}
+        self._slot_means: dict[tuple[int, int, int], float] = {}
         self._global_mean: float = 0.0
 
     def fit(self, X: np.ndarray, y: np.ndarray, **kwargs: Any) -> None:
-        slot_sums: dict[tuple[int, int], float] = defaultdict(float)
-        slot_counts: dict[tuple[int, int], int] = defaultdict(int)
+        slot_sums: dict[tuple[int, int, int], float] = defaultdict(float)
+        slot_counts: dict[tuple[int, int, int], int] = defaultdict(int)
 
         for i in range(len(X)):
-            key = (int(X[i, IDX_HOUR_OF_DAY]), int(X[i, IDX_DAY_OF_WEEK]))
+            key = (
+                int(X[i, IDX_ZONE_ID]),
+                int(X[i, IDX_HOUR_OF_DAY]),
+                int(X[i, IDX_DAY_OF_WEEK]),
+            )
             slot_sums[key] += y[i]
             slot_counts[key] += 1
 
@@ -41,7 +47,11 @@ class HistoricalSlotMean(DemandModel):
     def predict(self, X: np.ndarray) -> np.ndarray:
         preds = np.empty(len(X))
         for i in range(len(X)):
-            key = (int(X[i, IDX_HOUR_OF_DAY]), int(X[i, IDX_DAY_OF_WEEK]))
+            key = (
+                int(X[i, IDX_ZONE_ID]),
+                int(X[i, IDX_HOUR_OF_DAY]),
+                int(X[i, IDX_DAY_OF_WEEK]),
+            )
             preds[i] = self._slot_means.get(key, self._global_mean)
         return preds
 
