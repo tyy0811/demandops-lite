@@ -226,7 +226,10 @@ def test_app(mock_feature_service, mock_model):
     from demandops.serving.routes import configure, router
     app = FastAPI()
     app.include_router(router)
-    configure(app, mock_feature_service, mock_model, "lightgbm", time.time())
+    configure(
+        app, mock_feature_service, mock_model, "lightgbm", time.time(),
+        model_artifact_loaded=True,
+    )
     return app
 
 

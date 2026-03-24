@@ -44,18 +44,27 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         model_name = serving_cfg["model_name"]
         model_config = config["models"].get(model_name, {})
         model_params = {k: v for k, v in model_config.items() if k != "name"}
-        model = create_model(model_name, **model_params)
+        model = None
+        model_artifact_loaded = False
 
         if model_name == "lightgbm":
             model_path = Path(config["artifacts"]["models_dir"]) / f"{model_name}.joblib"
             if model_path.exists():
+                model = create_model(model_name, **model_params)
                 model.load(model_path)
+                model_artifact_loaded = True
                 logger.info("model_loaded", path=str(model_path))
             else:
                 logger.warning("model_file_not_found", path=str(model_path))
+        else:
+            model = create_model(model_name, **model_params)
+            model_artifact_loaded = True
 
-        configure(app, feature_service, model, model_name, start_time)
-        logger.info("app_started", model=model_name)
+        configure(
+            app, feature_service, model, model_name, start_time,
+            model_artifact_loaded=model_artifact_loaded,
+        )
+        logger.info("app_started", model=model_name, artifact_loaded=model_artifact_loaded)
 
     return app
 

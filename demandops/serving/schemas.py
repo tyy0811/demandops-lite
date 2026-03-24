@@ -34,10 +34,10 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     model_name: str
     history_loaded: bool
-    supported_start: datetime
-    supported_end: datetime
-    n_supported_zones: int
-    history_rows: int
+    supported_start: datetime | None = None
+    supported_end: datetime | None = None
+    n_supported_zones: int = 0
+    history_rows: int = 0
     uptime_seconds: float
 
 

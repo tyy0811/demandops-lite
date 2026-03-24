@@ -34,13 +34,19 @@ router = APIRouter()
 
 
 def configure(
-    app: FastAPI, feature_service, model, model_name: str, start_time: float
+    app: FastAPI,
+    feature_service,
+    model,
+    model_name: str,
+    start_time: float,
+    model_artifact_loaded: bool = True,
 ):
     """Store dependencies on app.state (fix #8: no module-level globals)."""
     app.state.feature_service = feature_service
     app.state.model = model
     app.state.model_name = model_name
     app.state.start_time = start_time
+    app.state.model_artifact_loaded = model_artifact_loaded
 
 
 @router.post("/predict", response_model=PredictResponse)
@@ -117,11 +123,10 @@ async def predict(body: PredictRequest, request: Request):
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request):
     svc = request.app.state.feature_service
-    model = request.app.state.model
     model_name = request.app.state.model_name
     start_time = request.app.state.start_time
 
-    model_loaded = model is not None
+    model_loaded = getattr(request.app.state, "model_artifact_loaded", False)
     history_loaded = svc is not None
 
     MODEL_LOADED.set(1 if model_loaded else 0)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from prometheus_client import REGISTRY
 
@@ -91,3 +93,63 @@ class TestMetricsEndpoint:
         body = test_client.get("/metrics").text
         assert "demandops_requests_total" in body
         assert "demandops_request_latency_seconds" in body
+
+
+class TestDegradedHealth:
+
+    @pytest.fixture
+    def degraded_client_no_model(self, mock_feature_service):
+        """App with feature service but no model artifact loaded."""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from demandops.serving.routes import configure, router
+
+        app = FastAPI()
+        app.include_router(router)
+        configure(
+            app, mock_feature_service, None, "lightgbm", time.time(),
+            model_artifact_loaded=False,
+        )
+        return TestClient(app)
+
+    @pytest.fixture
+    def degraded_client_no_services(self):
+        """App with neither feature service nor model."""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from demandops.serving.routes import configure, router
+
+        app = FastAPI()
+        app.include_router(router)
+        configure(
+            app, None, None, "lightgbm", time.time(),
+            model_artifact_loaded=False,
+        )
+        return TestClient(app)
+
+    def test_missing_model_reports_degraded(self, degraded_client_no_model) -> None:
+        resp = degraded_client_no_model.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert data["model_loaded"] is False
+        assert data["history_loaded"] is True
+
+    def test_missing_everything_reports_degraded(self, degraded_client_no_services) -> None:
+        resp = degraded_client_no_services.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert data["model_loaded"] is False
+        assert data["history_loaded"] is False
+        assert data["supported_start"] is None
+        assert data["supported_end"] is None
+        assert data["n_supported_zones"] == 0
+
+    def test_healthy_requires_both(self, test_client) -> None:
+        """Healthy state requires both model artifact and feature service."""
+        resp = test_client.get("/health")
+        data = resp.json()
+        assert data["status"] == "healthy"
+        assert data["model_loaded"] is True
+        assert data["history_loaded"] is True
