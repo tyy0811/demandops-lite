@@ -74,3 +74,72 @@ class TestSeasonalNaive:
         model.fit(X, y)
         preds = model.predict(X)
         assert (preds >= 0).all()
+
+
+class TestLightGBM:
+
+    @pytest.fixture
+    def trained_lgbm(self) -> tuple:
+        rng = np.random.RandomState(42)
+        X = _make_feature_array(rng, 200)
+        y = rng.poisson(3, 200).astype(float)
+
+        model = create_model(
+            "lightgbm", n_estimators=10, num_threads=1,
+            random_state=42, verbose=-1,
+        )
+        model.fit(X[:150], y[:150], eval_set=(X[150:], y[150:]))
+        return model, X
+
+    def test_predictions_non_negative(self, trained_lgbm: tuple) -> None:
+        model, X = trained_lgbm
+        preds = model.predict(X)
+        assert (preds >= 0).all(), f"Min prediction: {preds.min()}"
+
+    def test_predictions_near_zero_targets(self) -> None:
+        """Even with near-zero targets, predictions are non-negative."""
+        rng = np.random.RandomState(42)
+        n = 200
+        X = _make_feature_array(rng, n)
+        # Override lag columns with zeros to push predictions near zero
+        X[:, 5:9] = 0.0
+        y = rng.uniform(-0.1, 0.5, n).clip(0)
+
+        model = create_model(
+            "lightgbm", n_estimators=10, num_threads=1,
+            random_state=42, verbose=-1,
+        )
+        model.fit(X[:150], y[:150], eval_set=(X[150:], y[150:]))
+        preds = model.predict(X)
+        assert (preds >= 0).all()
+
+    def test_predict_raw_returns_unclipped(self, trained_lgbm: tuple) -> None:
+        """predict_raw() returns unclipped values (fix #7)."""
+        model, X = trained_lgbm
+        raw = model.predict_raw(X)
+        clipped = model.predict(X)
+        # Clipped should be >= 0, raw may have negatives
+        assert (clipped >= 0).all()
+        # Where raw >= 0, clipped == raw
+        mask = raw >= 0
+        np.testing.assert_array_almost_equal(clipped[mask], raw[mask])
+
+    def test_deterministic_with_seed(self, trained_lgbm: tuple) -> None:
+        model, X = trained_lgbm
+        preds1 = model.predict(X[:10])
+        preds2 = model.predict(X[:10])
+        np.testing.assert_array_equal(preds1, preds2)
+
+    def test_save_and_load_roundtrip(self, trained_lgbm: tuple, tmp_path) -> None:
+        """Model survives joblib save/load (fix #4)."""
+        model, X = trained_lgbm
+        preds_before = model.predict(X[:10])
+
+        path = tmp_path / "model.joblib"
+        model.save(path)
+
+        loaded = create_model("lightgbm", num_threads=1, verbose=-1)
+        loaded.load(path)
+        preds_after = loaded.predict(X[:10])
+
+        np.testing.assert_array_almost_equal(preds_before, preds_after)
