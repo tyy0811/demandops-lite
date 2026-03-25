@@ -81,6 +81,78 @@ class TestTfLAdapter:
         )
         assert s201_h11["trip_count"][0] == 2
 
+    def test_prepare_hourly_history_end_to_end(self, tmp_path) -> None:
+        """Full prepare_hourly_history() with mock CSVs: dense grid, schema, completeness."""
+        from unittest.mock import patch
+
+        from demandops.data.adapters import tfl as tfl_module
+        from demandops.data.adapters.tfl import TfLAdapter
+
+        # Create two mock CSVs for a single month (Jan 2024 week 1 and week 2)
+        header = (
+            "Rental Id,Duration,Bike Id,End Date,EndStation Id,EndStation Name,"
+            "Start Date,StartStation Id,StartStation Name\n"
+        )
+        week1 = header + (
+            "1,600,10,03/01/2024 10:10,99,End A,03/01/2024 10:00,500,Alpha\n"
+            "2,300,11,03/01/2024 10:20,99,End A,03/01/2024 10:05,501,Beta\n"
+        )
+        week2 = header + (
+            "3,400,12,10/01/2024 14:30,99,End A,10/01/2024 14:00,500,Alpha\n"
+        )
+
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "week1.csv").write_text(week1)
+        (raw_dir / "week2.csv").write_text(week2)
+
+        # Patch TFL_FILES to use our mock filenames for a single month
+        mock_files = {"2024-01": ["week1.csv", "week2.csv"]}
+
+        config = {
+            "data": {"months": ["2024-01"]},
+        }
+
+        adapter = TfLAdapter()
+        with patch.object(tfl_module, "TFL_FILES", mock_files):
+            history_df, zone_ids = adapter.prepare_hourly_history(
+                raw_dir, tmp_path / "processed", config
+            )
+
+        # Verify zone universe
+        assert sorted(zone_ids) == [500, 501]
+
+        # Verify schema columns match HourlyHistorySchema
+        assert set(history_df.columns) == {
+            "zone_id", "zone_name", "hour_ts", "trip_count", "avg_fare", "avg_distance"
+        }
+
+        # Verify dense grid: 2 stations × 744 hours (Jan has 31 days × 24h)
+        # Grid covers Dec 1 00:00 through Feb 29 23:00 = 2184 hours per station
+        # But with only Jan in months, we still get full Dec-Feb grid from DuckDB
+        n_stations = len(zone_ids)
+        assert len(history_df) == n_stations * 2184  # 2 stations × 2184 hours
+
+        # Verify non-zero counts exist where we placed trips
+        from datetime import datetime
+
+        s500_h10 = history_df.filter(
+            (pl.col("zone_id") == 500)
+            & (pl.col("hour_ts") == datetime(2024, 1, 3, 10))
+        )
+        assert s500_h10["trip_count"][0] == 1  # 1 trip from station 500 at that hour
+
+        # Verify zero-fill: station 501 at hour 14 on Jan 10 had no trips
+        s501_h14 = history_df.filter(
+            (pl.col("zone_id") == 501)
+            & (pl.col("hour_ts") == datetime(2024, 1, 10, 14))
+        )
+        assert s501_h14["trip_count"][0] == 0
+
+        # Verify avg_fare and avg_distance are null (TfL has no fare data)
+        assert history_df["avg_fare"].null_count() == len(history_df)
+        assert history_df["avg_distance"].null_count() == len(history_df)
+
     def test_missing_csv_raises_error(self, tmp_path) -> None:
         """Missing CSV file raises FileNotFoundError, not silent zeros."""
         from demandops.data.adapters.tfl import TfLAdapter
