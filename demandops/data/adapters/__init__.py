@@ -2,9 +2,11 @@
 
 from demandops.data.adapters.base import DatasetAdapter
 from demandops.data.adapters.taxi import TaxiAdapter
+from demandops.data.adapters.tfl import TfLAdapter
 
 ADAPTER_REGISTRY: dict[str, type[DatasetAdapter]] = {
     "taxi": TaxiAdapter,
+    "tfl": TfLAdapter,
 }
 
 
@@ -15,4 +17,4 @@ def get_adapter(name: str) -> DatasetAdapter:
     return ADAPTER_REGISTRY[name]()
 
 
-__all__ = ["DatasetAdapter", "TaxiAdapter", "get_adapter"]
+__all__ = ["DatasetAdapter", "TaxiAdapter", "TfLAdapter", "get_adapter"]
