@@ -142,3 +142,22 @@ All-or-nothing validation: if any request has an unsupported zone or timestamp, 
 `/predict` stays independent from `/predict/batch`. The original plan suggested wrapping single through batch, but each endpoint has its own request ID, error handling, and Prometheus labeling. Wrapping adds indirection for zero code savings.
 
 Performance: 10K requests × 27 dict lookups = 270K O(1) lookups, well under 100ms. Vectorized `model.predict()` on a 10K feature matrix is ~5ms on CPU. Full-request `latency_ms` is reported in the response (timer starts before the feature loop).
+
+## 19. Objective Function: regression vs. Poisson
+
+**Decision:** Keep `regression` (L2) as the default LightGBM objective. Poisson was tested and rejected based on empirical results.
+
+**Why:** Demand counts are non-negative and approximately Poisson-distributed, making Poisson regression a theoretically appropriate objective. We ran a controlled comparison (`scripts/compare_objectives.py`) with identical hyperparameters:
+
+| Objective | Test MAE | Negative Raw Preds | Best Iteration | Training Time |
+|-----------|----------|-------------------|----------------|---------------|
+| regression (L2) | 2.8997 | 1,344 (1.4%) | 455 | 2.8s |
+| poisson | 2.9066 | 0 (0.0%) | 500 | 4.0s |
+
+Regression wins by 0.2% MAE. Poisson eliminates all negative predictions — a qualitative property change — but the 1.4% clip rate under regression is negligible and already handled transparently by `np.clip(raw, 0.0, None)` in the serving layer.
+
+If the MAE improvement had been marginal but Poisson eliminated negatives, the stronger argument for switching would have been the zero-negative guarantee (qualitative), not the MAE delta (noisy). In this case, regression also wins on MAE, so there is no reason to switch.
+
+For datasets with more zero-inflated demand or stronger count-data characteristics, Poisson would likely outperform. Both runs are recorded in MLflow experiment `objective-comparison`.
+
+**Alternative considered:** Switching to Poisson despite worse MAE, for the zero-negative guarantee. Rejected because the serving layer already clips, the clip rate is 1.4%, and Poisson trains 43% slower.

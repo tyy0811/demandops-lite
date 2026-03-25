@@ -24,6 +24,17 @@ LightGBM reduces MAE by 14.6% vs slot mean and 27.7% vs seasonal naive. 1.4% of 
 
 Full report: [`docs/benchmark_report.md`](docs/benchmark_report.md)
 
+## V1 → V2 Improvements
+
+| Feature | V1 | V2 | Signal |
+|---------|----|----|--------|
+| CI quality gate | Lint + tests | + MAE regression gate + Docker smoke test | ML-specific CI |
+| Batch inference | Single-record only | `/predict/batch` (up to 10K) | Production serving |
+| Objective selection | regression (implicit) | regression vs. Poisson (documented) | Scientific rigor |
+| API contract | model_name only | + model_version, model_objective | Serving observability |
+
+See [DECISIONS.md](DECISIONS.md) for the reasoning behind each design choice.
+
 ## Quick Start
 
 ```bash
