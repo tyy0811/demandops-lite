@@ -2,38 +2,11 @@
 
 ![CI](https://github.com/tyy0811/demandops-lite/actions/workflows/ci.yaml/badge.svg)
 
-LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 99 tests.
+Same pipeline, two cities: NYC taxi (261 zones) + London bike-share (802 stations). LightGBM, FastAPI, Pandera contracts, Prometheus monitoring, 99 tests.
 
-End-to-end demand prediction pipeline for NYC taxi data — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
+End-to-end demand prediction pipeline with DatasetAdapter pattern — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
 
-> **99 tests | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
-
-## Benchmark Results
-
-**261 zones | 375,840 rows | 9 features | Test: Feb 15–29, 2024**
-
-| Model | MAE | RMSE | vs Slot Mean | vs Seasonal Naive |
-|-------|-----|------|-------------|-------------------|
-| **LightGBM** | **2.90** | **9.37** | **-14.6%** | **-27.7%** |
-| Slot Mean | 3.40 | 12.12 | — | — |
-| Seasonal Naive | 4.01 | 13.99 | +18.1% | — |
-
-LightGBM reduces MAE by 14.6% vs slot mean and 27.7% vs seasonal naive. 1.4% of predictions clipped to zero. Lag features (1h, 168h, 24h) dominate feature importance. Hardest zones: JFK Airport (MAE 29.9), Midtown Center (MAE 25.0).
-
-> **sMAPE note:** LightGBM's sMAPE (138.6%) exceeds both baselines (108.8%, 99.3%) because sMAPE heavily penalizes small absolute errors on near-zero actuals — a known artifact on zero-heavy distributions. MAE and RMSE are the appropriate metrics for this task. Full sMAPE breakdown in the benchmark report.
-
-Full report: [`docs/benchmark_report.md`](docs/benchmark_report.md)
-
-## V1 → V2 Improvements
-
-| Feature | V1 | V2 | Signal |
-|---------|----|----|--------|
-| CI quality gate | Lint + tests | + MAE regression gate + Docker smoke test | ML-specific CI |
-| Batch inference | Single-record only | `/predict/batch` (up to 10K) | Production serving |
-| Objective selection | regression (implicit) | regression vs. Poisson (documented) | Scientific rigor |
-| API contract | model_name only | + model_version, model_objective | Serving observability |
-
-See [DECISIONS.md](DECISIONS.md) for the reasoning behind each design choice.
+> **99 tests | 2 datasets | 1,063 zones/stations | Prometheus `/metrics` | Docker ready**
 
 ## Dual-Dataset Benchmark
 
@@ -49,6 +22,32 @@ Same pipeline, two datasets, two cities:
 | LightGBM vs Slot Mean | -14.6% | +1.9% |
 
 LightGBM dominates on NYC taxi data (high-variance demand, 14.6% MAE reduction). On London bike-share, the simpler slot mean is competitive — low-variance station demand means the historical average is hard to beat on MAE, though LightGBM wins on RMSE (1.28 vs 1.31). Both datasets use identical feature engineering, model training, and evaluation code via the DatasetAdapter pattern.
+
+Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md)
+
+## What This Demonstrates
+
+- **Pipeline generality**: DatasetAdapter pattern — same code runs on NYC taxi and London bike-share
+- **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines
+- **Data contracts**: Pandera validation at every pipeline boundary
+- **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking, objective experiments
+- **Train-serve parity**: FeatureService reconstructs identical lag features at inference time
+- **Batch inference**: `/predict/batch` for up to 10K vectorized predictions per request
+- **ML quality gates**: MAE regression gate in CI with frozen test fixture
+- **Monitoring**: Prometheus counters, latency histograms, prediction distribution
+- **Production patterns**: Docker, CI, structured logging, config-driven, graceful degradation
+
+## V1 → V2 Improvements
+
+| Feature | V1 | V2 | Signal |
+|---------|----|----|--------|
+| Datasets | NYC taxi only | + London bike-share (DatasetAdapter) | Pipeline generality |
+| CI quality gate | Lint + tests | + MAE regression gate + Docker smoke test | ML-specific CI |
+| Batch inference | Single-record only | `/predict/batch` (up to 10K) | Production serving |
+| Objective selection | regression (implicit) | regression vs. Poisson (documented) | Scientific rigor |
+| API contract | model_name only | + model_version, model_objective | Serving observability |
+
+See [DECISIONS.md](DECISIONS.md) for the reasoning behind each design choice.
 
 ## Quick Start
 
@@ -79,30 +78,20 @@ curl http://localhost:8001/metrics
 ## Architecture
 
 ```
-NYC TLC Parquet → DuckDB (filter/aggregate/densify) → Polars (features) → LightGBM (predict)
-                                                                              ↓
-                                                                         FastAPI /predict
-                                                                              ↑
-                                                             FeatureService (lag reconstruction)
+Raw data → DatasetAdapter (download/aggregate/densify) → Polars (features) → LightGBM (predict)
+                                                                                  ↓
+                                                                             FastAPI /predict
+                                                                                  ↑
+                                                                 FeatureService (lag reconstruction)
 ```
 
 **Data flow:**
-1. **Download** 3 months of NYC Yellow Taxi trip data (Dec 2023 – Feb 2024)
-2. **Prepare** dense zone×hour grid via DuckDB, engineer lag/temporal features with Polars
+1. **Download** raw trip data via DatasetAdapter (NYC taxi parquets or TfL bike-share CSVs)
+2. **Prepare** dense entity×hour grid via DuckDB, engineer lag/temporal features with Polars
 3. **Validate** at every boundary with Pandera data contracts
 4. **Train** slot mean baseline, seasonal naive baseline, and LightGBM
 5. **Evaluate** on held-out test set with per-zone and edge-case analysis
 6. **Serve** via FastAPI with FeatureService reconstructing lags at request time
-
-## What This Demonstrates
-
-- **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines
-- **Data contracts**: Pandera validation at every pipeline boundary
-- **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking, objective experiments
-- **Train-serve parity**: FeatureService reconstructs identical lag features at inference time
-- **Batch inference**: `/predict/batch` for up to 10K vectorized predictions per request
-- **Monitoring**: Prometheus counters, latency histograms, prediction distribution
-- **Production patterns**: Docker, CI, structured logging, config-driven, graceful degradation
 
 ## Tech Stack
 
@@ -126,42 +115,48 @@ NYC TLC Parquet → DuckDB (filter/aggregate/densify) → Polars (features) → 
 
 ```
 demandops-lite/
-├── configs/default.yaml          # All configuration (splits, models, paths)
+├── configs/
+│   ├── default.yaml             # NYC taxi configuration
+│   └── tfl.yaml                 # London bike-share configuration
 ├── demandops/
-│   ├── features.py               # FEATURE_COLUMNS — single source of truth
+│   ├── features.py              # FEATURE_COLUMNS — single source of truth
 │   ├── data/
-│   │   ├── download.py           # Atomic TLC data download
-│   │   ├── prepare.py            # DuckDB → Polars pipeline
-│   │   ├── schemas.py            # Pandera data contracts
-│   │   └── splits.py             # Half-open temporal split
+│   │   ├── adapters/
+│   │   │   ├── base.py          # DatasetAdapter ABC
+│   │   │   ├── taxi.py          # NYC TLC Yellow Taxi adapter
+│   │   │   └── tfl.py           # TfL Santander Cycle Hire adapter
+│   │   ├── download.py          # Adapter-delegated download
+│   │   ├── prepare.py           # Shared feature engineering pipeline
+│   │   ├── schemas.py           # Pandera data contracts
+│   │   └── splits.py            # Half-open temporal split
 │   ├── models/
-│   │   ├── registry.py           # DemandModel ABC + factory
-│   │   ├── baselines.py          # Slot mean, seasonal naive
-│   │   └── lightgbm_model.py     # LightGBM with clipping + predict_raw
+│   │   ├── registry.py          # DemandModel ABC + factory
+│   │   ├── baselines.py         # Slot mean, seasonal naive
+│   │   └── lightgbm_model.py    # LightGBM with clipping + predict_raw
 │   ├── training/
-│   │   ├── train.py              # Train all models, MLflow logging
-│   │   └── evaluate.py           # Metrics, per-zone analysis, edge cases
+│   │   ├── train.py             # Train all models, MLflow logging
+│   │   └── evaluate.py          # Metrics, per-zone analysis, edge cases
 │   ├── serving/
-│   │   ├── app.py                # FastAPI factory (graceful degradation)
-│   │   ├── routes.py             # /predict, /predict/batch, /health, /metrics
-│   │   ├── feature_service.py    # Lag reconstruction from dense history
-│   │   ├── schemas.py            # Pydantic request/response models
-│   │   ├── metrics.py            # Prometheus counters/histograms
-│   │   └── middleware.py         # Request logging
+│   │   ├── app.py               # FastAPI factory (graceful degradation)
+│   │   ├── routes.py            # /predict, /predict/batch, /health, /metrics
+│   │   ├── feature_service.py   # Lag reconstruction from dense history
+│   │   ├── schemas.py           # Pydantic request/response models
+│   │   ├── metrics.py           # Prometheus counters/histograms
+│   │   └── middleware.py        # Request logging
 │   └── monitoring/
-│       └── checks.py             # Sparse zone, extreme prediction checks
-├── scripts/                      # CLI entrypoints
-├── tests/                        # 99 tests
-├── docker/                       # Dockerfile + docker-compose
-├── .github/workflows/ci.yaml     # GitHub Actions
-└── Makefile                      # Pipeline targets
+│       └── checks.py            # Sparse zone, extreme prediction checks
+├── scripts/                     # CLI entrypoints (all accept --config)
+├── tests/                       # 99 tests
+├── docker/                      # Dockerfile + docker-compose
+├── .github/workflows/ci.yaml   # GitHub Actions (test + Docker smoke test)
+└── Makefile                     # Pipeline targets
 ```
 
 ## Data Pipeline
 
-**Input:** NYC TLC Yellow Taxi trip records (Dec 2023 – Feb 2024)
+**Input:** Trip records via DatasetAdapter (NYC taxi parquets or TfL bike-share CSVs, Dec 2023 – Feb 2024)
 
-**Grid:** Dense zone×hour matrix. Every (zone_id, hour_ts) pair has exactly one row. Zero-demand hours are filled with trip_count=0. December provides warm-up for lag features.
+**Grid:** Dense entity×hour matrix. Every (zone_id, hour_ts) pair has exactly one row. Zero-demand hours are filled with trip_count=0. December provides warm-up for lag features.
 
 **Features (9):**
 
@@ -171,7 +166,7 @@ demandops-lite/
 | day_of_week | temporal | 0=Mon, 6=Sun (Python convention) |
 | is_weekend | temporal | Sat(5) + Sun(6) |
 | month | temporal | 1–12 |
-| zone_id | categorical | TLC pickup location ID |
+| zone_id | categorical | Entity ID (taxi zone or bike station) |
 | lag_1h | lag | trip_count at t-1 |
 | lag_24h | lag | trip_count at t-24 |
 | lag_168h | lag | trip_count at t-168 (same hour, 1 week ago) |
@@ -190,7 +185,7 @@ demandops-lite/
 | **Seasonal Naive** | lag_168h (same hour, same day, one week ago) |
 | **LightGBM** | Gradient-boosted trees, predictions clipped to zero |
 
-Run `make benchmark` after `make pipeline` to generate `docs/benchmark_report.md` with full model comparison, feature importance, edge-case analysis, and per-zone error breakdown.
+Run `python scripts/benchmark.py --config configs/default.yaml` to generate the NYC benchmark report, or `--config configs/tfl.yaml` for London.
 
 ## API
 
@@ -281,21 +276,13 @@ make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
 ```
 
-## V2 Roadmap
-
-- [x] Batch prediction endpoint (`/predict/batch`, up to 10K records)
-- [x] Poisson objective experiment (regression wins by 0.2% MAE; documented)
-- [x] MAE regression gate in CI (frozen fixture + threshold assertion)
-- [x] Second dataset (TfL Cycle Hire) for pipeline generality
-
 ## Key Design Decisions
 
-See [DECISIONS.md](DECISIONS.md) for the full rationale behind:
-- DuckDB for aggregation (not pandas)
-- Polars for feature engineering (not pandas)
-- Dense grid with December warm-up (not sparse)
-- Weekday convention: 0=Mon, 6=Sun everywhere
-- LightGBM predictions clipped to zero (Poisson tested, regression wins by 0.2% MAE)
-- joblib for model serialization (not Booster text format)
-- `app.state` for dependency injection (not module globals)
-- Pandera validation at every pipeline boundary
+See [DECISIONS.md](DECISIONS.md) for 20 documented rationales, including:
+- DatasetAdapter pattern for pipeline generality (NYC taxi + London bike-share)
+- DuckDB for aggregation, Polars for feature engineering (not pandas)
+- Poisson vs regression objective (empirically tested, regression wins by 0.2%)
+- MAE regression gate in CI (frozen fixture + committed model)
+- Batch endpoint design (all-or-nothing validation, independent from /predict)
+- Dense grid with December warm-up, half-open temporal splits
+- Graceful degradation, Pandera at every boundary, Prometheus monitoring
