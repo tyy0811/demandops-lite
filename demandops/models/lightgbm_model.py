@@ -25,6 +25,7 @@ class LightGBMModel(DemandModel):
 
     def __init__(
         self,
+        objective: str = "regression",
         n_estimators: int = 500,
         learning_rate: float = 0.05,
         max_depth: int = 6,
@@ -39,6 +40,7 @@ class LightGBMModel(DemandModel):
         **kwargs: Any,
     ) -> None:
         self._params = {
+            "objective": objective,
             "n_estimators": n_estimators,
             "learning_rate": learning_rate,
             "max_depth": max_depth,

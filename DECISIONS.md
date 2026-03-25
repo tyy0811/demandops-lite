@@ -1,6 +1,6 @@
 # Design Decisions
 
-Rationale behind the key technical choices in demandops-lite V1.
+Rationale behind the key technical choices in demandops-lite (V1 and V2).
 
 ## 1. DuckDB for Aggregation
 
@@ -30,13 +30,22 @@ Rationale behind the key technical choices in demandops-lite V1.
 
 **Why:** A single convention eliminates a class of off-by-one bugs. Python's convention is the natural choice because `FeatureService` uses `datetime.weekday()` at serving time. Making the training pipeline match (by subtracting 1 from Polars) ensures train-serve parity. `is_weekend = day_of_week >= 5` is correct under both.
 
-## 5. LightGBM Predictions Clipped to Zero
+## 5. LightGBM Predictions Clipped to Zero (Validated by Experiment)
 
-**Decision:** `predict()` returns `np.clip(raw, 0.0, None)`. `predict_raw()` returns unclipped values for tracking clip statistics.
+**Decision:** `predict()` returns `np.clip(raw, 0.0, None)`. `predict_raw()` returns unclipped values for tracking clip statistics. Default objective remains `regression` (L2).
 
 **Why:** Trip counts are non-negative by definition. LightGBM's regression objective can produce small negative predictions near zero. Clipping is simpler and more interpretable than a constrained objective (Poisson, Tweedie). The `predict_raw()` method allows accurate tracking of how many predictions required clipping — important for monitoring model quality.
 
-**Alternative considered:** Poisson regression objective. Rejected because it constrains the entire prediction surface for what is a boundary-only problem. Clipping is transparent and reversible.
+**Empirical validation:** Ran a controlled experiment comparing regression vs Poisson objectives with identical hyperparameters on the same train/val/test split (`scripts/compare_objectives.py`):
+
+| Objective | Test MAE | Negative Raw Preds | Best Iteration | Time |
+|-----------|----------|-------------------|----------------|------|
+| regression | 2.8997 | 1,344 (1.4%) | 455 | 2.8s |
+| poisson | 2.9066 | 0 (0.0%) | 500 | 4.0s |
+
+Regression wins by 0.2% MAE. Poisson eliminates all negative predictions, but 1.4% clip rate is negligible in practice and handled transparently by `np.clip`. Both runs logged to MLflow experiment `objective-comparison`.
+
+**Alternative considered:** Poisson regression objective. Empirically tested and rejected: 0.2% worse MAE, 43% slower training, and the problem Poisson solves (negative predictions) affects only 1.4% of outputs and is already handled by clipping.
 
 ## 6. joblib for Model Serialization
 
@@ -109,3 +118,60 @@ Rationale behind the key technical choices in demandops-lite V1.
 **Why:** Prometheus is the de facto standard for ML serving observability. Module-level metric definitions are the library's intended pattern — they register once on the default `CollectorRegistry` at import time. The `/metrics` endpoint returns the standard text exposition format, compatible with any Prometheus scraper without additional infrastructure. Metrics cover: request counts by endpoint/status, prediction latency, prediction value distribution, rejection reasons, error counts, and model/history load status gauges.
 
 **Alternative considered:** OpenTelemetry. Rejected for V1 because it adds complexity (exporters, collectors, SDK configuration) without a clear benefit when the deployment target is a single-node Docker container with a Prometheus scrape.
+
+## 17. MAE Regression Gate in CI
+
+**Decision:** Add a frozen test set (7,200 rows, 20 zones, committed to repo) and an assertion that MAE stays below 3.20 on every push. The pre-trained model artifact (~1.1MB) is also committed.
+
+**Why:** ML pipelines have a subtle failure mode: code changes that pass all unit tests but silently degrade model quality. A renamed column, a changed default, or a dependency upgrade can shift predictions without any test catching it. The regression gate catches this class of bug.
+
+The threshold (3.20) is 10% above the V1 baseline MAE of 2.90 — deliberately loose to catch regressions, not block improvements. The frozen test set never changes: if the evaluation anchor evolves with the code, it can't detect drift. The training set and features may change; the evaluation anchor must not.
+
+The test loads the raw `LGBMRegressor` (not the `LightGBMModel` wrapper) intentionally — testing raw predictions catches regressions before the serving layer's `np.clip(0)` masks them. A non-negative prediction check acts as an early warning for when to reconsider the Poisson objective.
+
+**Alternative considered:** `pytest.skip` when model not found (gate only runs locally). Rejected because a gate that depends on the developer remembering to run it is exactly the failure mode CI exists to prevent.
+
+## 18. Batch Prediction Endpoint
+
+**Decision:** `POST /predict/batch` accepts up to 10,000 records. Loops over `FeatureService.get_features()` (one dict lookup per lag per request) then calls `model.predict()` once on the full feature matrix.
+
+**Why:** Demand forecasting is a batch operation: 261 zones × 24 hours = 6,264 predictions. Exposing this as a single endpoint avoids 6,264 HTTP round-trips.
+
+All-or-nothing validation: if any request has an unsupported zone or timestamp, the entire batch returns 422 with the first error. Partial success was considered but rejected — it requires per-item status codes, a different response schema, and decisions about whether to run inference on the valid subset. None of this adds meaningful signal for the portfolio use case.
+
+`/predict` stays independent from `/predict/batch`. The original plan suggested wrapping single through batch, but each endpoint has its own request ID, error handling, and Prometheus labeling. Wrapping adds indirection for zero code savings.
+
+Performance: 10K requests × 27 dict lookups = 270K O(1) lookups, well under 100ms. Vectorized `model.predict()` on a 10K feature matrix is ~5ms on CPU. Full-request `latency_ms` is reported in the response (timer starts before the feature loop).
+
+## 19. Objective Function: regression vs. Poisson
+
+**Decision:** Keep `regression` (L2) as the default LightGBM objective. Poisson was tested and rejected based on empirical results.
+
+**Why:** Demand counts are non-negative and approximately Poisson-distributed, making Poisson regression a theoretically appropriate objective. We ran a controlled comparison (`scripts/compare_objectives.py`) with identical hyperparameters:
+
+| Objective | Test MAE | Negative Raw Preds | Best Iteration | Training Time |
+|-----------|----------|-------------------|----------------|---------------|
+| regression (L2) | 2.8997 | 1,344 (1.4%) | 455 | 2.8s |
+| poisson | 2.9066 | 0 (0.0%) | 500 | 4.0s |
+
+Regression wins by 0.2% MAE. Poisson eliminates all negative predictions — a qualitative property change — but the 1.4% clip rate under regression is negligible and already handled transparently by `np.clip(raw, 0.0, None)` in the serving layer.
+
+If the MAE improvement had been marginal but Poisson eliminated negatives, the stronger argument for switching would have been the zero-negative guarantee (qualitative), not the MAE delta (noisy). In this case, regression also wins on MAE, so there is no reason to switch.
+
+For datasets with more zero-inflated demand or stronger count-data characteristics, Poisson would likely outperform. Both runs are recorded in MLflow experiment `objective-comparison`.
+
+**Alternative considered:** Switching to Poisson despite worse MAE, for the zero-negative guarantee. Rejected because the serving layer already clips, the clip rate is 1.4%, and Poisson trains 43% slower.
+
+## 20. DatasetAdapter Pattern for Pipeline Generality
+
+**Decision:** Abstract dataset-specific logic (download, raw-to-hourly aggregation, grid densification) behind a `DatasetAdapter` interface. All downstream code — feature engineering, training, evaluation, serving — operates on a common schema: `(zone_id, zone_name, hour_ts, trip_count)`.
+
+**Why:** Demonstrating the same pipeline on two datasets (NYC taxi, London bike-share) proves generality. The adapter boundary sits at the densification output: each adapter produces a dense hourly history DataFrame, and shared code handles everything downstream.
+
+TfL stations are mapped to `zone_id` via rename. The column name is a generic entity identifier — renaming to "entity_id" everywhere would touch 15+ files for no functional benefit.
+
+TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemens, Albatross). NYC + London demonstrates pipeline generality across cities and transport modes — stronger than two NYC datasets.
+
+**Result:** 802 TfL stations, 1.75M history rows, 1.15M feature rows. Slot mean MAE 0.75, LightGBM MAE 0.77. The simpler baseline is competitive on London bike-share because station-level demand has lower variance than NYC taxi zone demand — the historical average is hard to beat. LightGBM wins on RMSE (1.28 vs 1.31), consistent with its advantage on high-error outliers.
+
+**Alternative considered:** Citibike (NYC). Rejected — same city doesn't demonstrate geographic generality. Porto taxi dataset also considered but requires spatial binning of GPS trajectories, adding complexity that doesn't match the adapter pattern.

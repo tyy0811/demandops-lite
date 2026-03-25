@@ -37,6 +37,7 @@ class TestPredictEndpoint:
         assert data["zone_id"] == 1
         assert data["predicted_count"] == 42.5
         assert data["model_name"] == "lightgbm"
+        assert data["model_version"] == "lightgbm-regression"
 
     def test_unsupported_zone(self, test_client) -> None:
         resp = test_client.post(
@@ -88,6 +89,11 @@ class TestHealthEndpoint:
         assert "supported_start" in data
         assert "supported_end" in data
 
+    def test_health_includes_model_objective(self, test_client) -> None:
+        data = test_client.get("/health").json()
+        assert data["model_objective"] == "regression"
+        assert data["model_version"] == "lightgbm-regression"
+
 
 class TestMetricsEndpoint:
     def test_metrics_returns_text_plain(self, test_client) -> None:
@@ -125,6 +131,8 @@ class TestDegradedHealth:
             "lightgbm",
             time.time(),
             model_artifact_loaded=False,
+            model_objective="regression",
+            model_version="lightgbm-regression",
         )
         return TestClient(app)
 
@@ -144,6 +152,8 @@ class TestDegradedHealth:
             "lightgbm",
             time.time(),
             model_artifact_loaded=False,
+            model_objective="regression",
+            model_version="lightgbm-regression",
         )
         return TestClient(app)
 
@@ -199,3 +209,94 @@ class TestDegradedHealth:
             assert data["status"] == "degraded"
             assert data["model_loaded"] is False
             assert data["history_loaded"] is False
+
+
+class TestBatchPredictEndpoint:
+    def test_batch_prediction(self, test_client) -> None:
+        """Batch of 3 valid requests returns 3 predictions."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                    {"zone_id": 2, "hour_ts": "2024-02-01T13:00:00"},
+                    {"zone_id": 3, "hour_ts": "2024-02-01T14:00:00"},
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["prediction_count"] == 3
+        assert len(data["predictions"]) == 3
+        assert data["latency_ms"] > 0
+        for pred in data["predictions"]:
+            assert pred["predicted_count"] == 42.5
+            assert pred["model_name"] == "lightgbm"
+            assert pred["model_version"] == "lightgbm-regression"
+
+    def test_single_item_batch(self, test_client) -> None:
+        """Batch of 1 item works (min_length=1)."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["prediction_count"] == 1
+
+    def test_empty_batch_rejected(self, test_client) -> None:
+        """Empty batch returns 422 (min_length=1)."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={"requests": []},
+        )
+        assert resp.status_code == 422
+
+    def test_batch_unsupported_zone_fails_all(self, test_client) -> None:
+        """One bad zone_id in batch fails the entire request."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                    {"zone_id": 999, "hour_ts": "2024-02-01T12:00:00"},
+                ]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_batch_unsupported_timestamp_fails_all(self, test_client) -> None:
+        """One bad timestamp in batch fails the entire request."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                    {"zone_id": 1, "hour_ts": "2023-06-01T12:00:00"},
+                ]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_batch_latency_covers_full_request(self, test_client) -> None:
+        """latency_ms is present and positive."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                ]
+            },
+        )
+        assert resp.json()["latency_ms"] > 0
+
+    def test_oversized_batch_rejected(self, test_client) -> None:
+        """Batch exceeding max_length=10_000 returns 422."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={"requests": [{"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"}] * 10_001},
+        )
+        assert resp.status_code == 422

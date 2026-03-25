@@ -1,10 +1,9 @@
 dataset:
-  adapter: taxi
+  adapter: tfl
 
 data:
-  raw_dir: data/raw
-  processed_dir: data/processed
-  zones_path: data/zones.csv
+  raw_dir: data/tfl/raw
+  processed_dir: data/tfl/processed
   months: ["2023-12", "2024-01", "2024-02"]
   warmup_months: ["2023-12"]
   target_column: trip_count
@@ -43,20 +42,20 @@ models:
 
 mlflow:
   tracking_uri: "file:./mlruns"
-  experiment_name: "demandops-v1"
+  experiment_name: "demandops-tfl"
 
 artifacts:
-  models_dir: artifacts/models
-  reports_dir: artifacts/reports
-  feature_schema_path: artifacts/models/feature_schema.json
-  zone_universe_path: artifacts/zone_universe.json
+  models_dir: artifacts/tfl/models
+  reports_dir: artifacts/tfl/reports
+  feature_schema_path: artifacts/tfl/models/feature_schema.json
+  zone_universe_path: artifacts/tfl/zone_universe.json
 
 serving:
   host: "0.0.0.0"
   port: 8001
   model_name: lightgbm
-  history_path: data/processed/hourly_history.parquet
-  feature_path: data/processed/features.parquet
-  feature_schema_path: artifacts/models/feature_schema.json
-  zone_universe_path: artifacts/zone_universe.json
+  history_path: data/tfl/processed/hourly_history.parquet
+  feature_path: data/tfl/processed/features.parquet
+  feature_schema_path: artifacts/tfl/models/feature_schema.json
+  zone_universe_path: artifacts/tfl/zone_universe.json
   request_timeout_seconds: 10

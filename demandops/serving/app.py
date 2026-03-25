@@ -68,6 +68,9 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         except Exception as e:
             logger.error("model_load_failed", error=str(e))
 
+        model_objective = model_params.get("objective", "regression")
+        model_version = f"{model_name}-{model_objective}"
+
         configure(
             app,
             feature_service,
@@ -75,10 +78,13 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
             model_name,
             start_time,
             model_artifact_loaded=model_artifact_loaded,
+            model_objective=model_objective,
+            model_version=model_version,
         )
         logger.info(
             "app_started",
             model=model_name,
+            objective=model_objective,
             artifact_loaded=model_artifact_loaded,
             history_loaded=feature_service is not None,
         )

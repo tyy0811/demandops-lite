@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+# LightGBM requires libgomp (OpenMP runtime)
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy just pyproject.toml first for dependency layer caching

@@ -11,17 +11,18 @@ import polars as pl
 
 
 class HourlyHistorySchema(pa.DataFrameModel):
-    """Schema for hourly_history.parquet — dense zone×hour grid.
+    """Schema for hourly_history.parquet -- dense zone x hour grid.
 
-    Covers Dec 2023 – Feb 2024. Every (zone_id, hour_ts) pair in the
-    zone universe has exactly one row. trip_count is 0 for no-demand hours.
+    Every (zone_id, hour_ts) pair in the zone universe has exactly one row.
+    trip_count is 0 for no-demand hours.
     avg_fare and avg_distance are nullable (null for zero-demand hours).
     """
 
     class Config:
         coerce = True
 
-    zone_id: int = pa.Field(ge=1, le=263)
+    # No upper bound -- supports taxi zones (1-263) and TfL stations (higher IDs)
+    zone_id: int = pa.Field(ge=1)
     zone_name: str = pa.Field(nullable=False)
     hour_ts: pl.Datetime = pa.Field(nullable=False)
     trip_count: int = pa.Field(ge=0)
@@ -30,16 +31,17 @@ class HourlyHistorySchema(pa.DataFrameModel):
 
 
 class FeatureSchema(pa.DataFrameModel):
-    """Schema for features.parquet — model-ready features, Jan–Feb only.
+    """Schema for features.parquet -- model-ready features.
 
-    No December rows. All lags populated (dense grid guarantees this).
+    No warm-up rows. All lags populated (dense grid guarantees this).
     No nulls in any column. day_of_week uses 0=Mon, 6=Sun convention.
     """
 
     class Config:
         coerce = True
 
-    zone_id: int = pa.Field(ge=1, le=263)
+    # No upper bound -- supports taxi zones (1-263) and TfL stations (higher IDs)
+    zone_id: int = pa.Field(ge=1)
     hour_ts: pl.Datetime = pa.Field(nullable=False)
     trip_count: int = pa.Field(ge=0)
     hour_of_day: int = pa.Field(ge=0, le=23)
@@ -58,6 +60,7 @@ class PredictionOutputSchema(pa.DataFrameModel):
     class Config:
         coerce = True
 
-    zone_id: int = pa.Field(ge=1, le=263)
+    # No upper bound -- supports taxi zones (1-263) and TfL stations (higher IDs)
+    zone_id: int = pa.Field(ge=1)
     hour_ts: pl.Datetime = pa.Field(nullable=False)
     predicted_count: float = pa.Field(ge=0.0)

@@ -1,5 +1,6 @@
 """Script entrypoint for model training."""
 
+import argparse
 from pathlib import Path
 
 import yaml
@@ -8,7 +9,11 @@ from demandops.training.train import train_all
 
 
 def main() -> None:
-    config = yaml.safe_load(Path("configs/default.yaml").read_text())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/default.yaml")
+    args = parser.parse_args()
+
+    config = yaml.safe_load(Path(args.config).read_text())
     results = train_all(
         features_path=Path(config["data"]["processed_dir"]) / "features.parquet",
         config=config,
