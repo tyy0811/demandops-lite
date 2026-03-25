@@ -1,10 +1,12 @@
 # demandops-lite
 
-LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 91 tests.
+![CI](https://github.com/tyy0811/demandops-lite/actions/workflows/ci.yaml/badge.svg)
+
+LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 90 tests.
 
 End-to-end demand prediction pipeline for NYC taxi data — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
 
-> **91 tests | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
+> **90 tests | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
 
 ## Benchmark Results
 
@@ -123,7 +125,7 @@ demandops-lite/
 │   └── monitoring/
 │       └── checks.py             # Sparse zone, extreme prediction checks
 ├── scripts/                      # CLI entrypoints
-├── tests/                        # 91 tests
+├── tests/                        # 90 tests
 ├── docker/                       # Dockerfile + docker-compose
 ├── .github/workflows/ci.yaml     # GitHub Actions
 └── Makefile                      # Pipeline targets
@@ -247,7 +249,7 @@ docker-compose down
 ## Development
 
 ```bash
-make test       # Run 91 tests
+make test       # Run 90 tests
 make lint       # ruff check + format --check
 make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
@@ -259,7 +261,6 @@ make clean      # Remove generated data/artifacts
 - [x] Poisson objective experiment (regression wins by 0.2% MAE; documented)
 - [x] MAE regression gate in CI (frozen fixture + threshold assertion)
 - [ ] Second dataset (TfL Cycle Hire) for pipeline generality
-- [ ] Weather features (OpenWeather history join)
 
 ## Key Design Decisions
 

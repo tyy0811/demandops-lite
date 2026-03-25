@@ -1,6 +1,6 @@
 # Design Decisions
 
-Rationale behind the key technical choices in demandops-lite.
+Rationale behind the key technical choices in demandops-lite (V1 and V2).
 
 ## 1. DuckDB for Aggregation
 
@@ -118,3 +118,27 @@ Regression wins by 0.2% MAE. Poisson eliminates all negative predictions, but 1.
 **Why:** Prometheus is the de facto standard for ML serving observability. Module-level metric definitions are the library's intended pattern — they register once on the default `CollectorRegistry` at import time. The `/metrics` endpoint returns the standard text exposition format, compatible with any Prometheus scraper without additional infrastructure. Metrics cover: request counts by endpoint/status, prediction latency, prediction value distribution, rejection reasons, error counts, and model/history load status gauges.
 
 **Alternative considered:** OpenTelemetry. Rejected for V1 because it adds complexity (exporters, collectors, SDK configuration) without a clear benefit when the deployment target is a single-node Docker container with a Prometheus scrape.
+
+## 17. MAE Regression Gate in CI
+
+**Decision:** Add a frozen test set (7,200 rows, 20 zones, committed to repo) and an assertion that MAE stays below 3.20 on every push. The pre-trained model artifact (~1.1MB) is also committed.
+
+**Why:** ML pipelines have a subtle failure mode: code changes that pass all unit tests but silently degrade model quality. A renamed column, a changed default, or a dependency upgrade can shift predictions without any test catching it. The regression gate catches this class of bug.
+
+The threshold (3.20) is 10% above the V1 baseline MAE of 2.90 — deliberately loose to catch regressions, not block improvements. The frozen test set never changes: if the evaluation anchor evolves with the code, it can't detect drift. The training set and features may change; the evaluation anchor must not.
+
+The test loads the raw `LGBMRegressor` (not the `LightGBMModel` wrapper) intentionally — testing raw predictions catches regressions before the serving layer's `np.clip(0)` masks them. A non-negative prediction check acts as an early warning for when to reconsider the Poisson objective.
+
+**Alternative considered:** `pytest.skip` when model not found (gate only runs locally). Rejected because a gate that depends on the developer remembering to run it is exactly the failure mode CI exists to prevent.
+
+## 18. Batch Prediction Endpoint
+
+**Decision:** `POST /predict/batch` accepts up to 10,000 records. Loops over `FeatureService.get_features()` (one dict lookup per lag per request) then calls `model.predict()` once on the full feature matrix.
+
+**Why:** Demand forecasting is a batch operation: 261 zones × 24 hours = 6,264 predictions. Exposing this as a single endpoint avoids 6,264 HTTP round-trips.
+
+All-or-nothing validation: if any request has an unsupported zone or timestamp, the entire batch returns 422 with the first error. Partial success was considered but rejected — it requires per-item status codes, a different response schema, and decisions about whether to run inference on the valid subset. None of this adds meaningful signal for the portfolio use case.
+
+`/predict` stays independent from `/predict/batch`. The original plan suggested wrapping single through batch, but each endpoint has its own request ID, error handling, and Prometheus labeling. Wrapping adds indirection for zero code savings.
+
+Performance: 10K requests × 27 dict lookups = 270K O(1) lookups, well under 100ms. Vectorized `model.predict()` on a 10K feature matrix is ~5ms on CPU. Full-request `latency_ms` is reported in the response (timer starts before the feature loop).
