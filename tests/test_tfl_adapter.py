@@ -11,15 +11,26 @@ import pytest
 
 @pytest.fixture
 def mock_tfl_csv(tmp_path: Path) -> Path:
-    """Create a mock TfL CSV file with known data."""
+    """Create a mock TfL CSV file matching the 2023-2024 schema."""
     csv_content = (
-        "Rental Id,Duration,Bike Id,End Date,EndStation Id,EndStation Name,"
-        "Start Date,StartStation Id,StartStation Name\n"
-        "1,600,123,01/01/2024 10:10,100,Station A End,01/01/2024 10:00,200,Station Alpha\n"
-        "2,300,456,01/01/2024 10:05,101,Station B End,01/01/2024 10:01,200,Station Alpha\n"
-        "3,900,789,01/01/2024 11:15,100,Station A End,01/01/2024 11:00,201,Station Beta\n"
-        "4,450,012,01/01/2024 11:30,101,Station B End,01/01/2024 11:05,200,Station Alpha\n"
-        "5,500,345,01/01/2024 12:00,100,Station A End,01/01/2024 11:30,201,Station Beta\n"
+        '"Number","Start date","Start station number","Start station",'
+        '"End date","End station number","End station",'
+        '"Bike number","Bike model","Total duration","Total duration (ms)"\n'
+        '"1","2024-01-01 10:00","200","Station Alpha",'
+        '"2024-01-01 10:10","100","Station A End",'
+        '"123","CLASSIC","10m 0s","600000"\n'
+        '"2","2024-01-01 10:01","200","Station Alpha",'
+        '"2024-01-01 10:05","101","Station B End",'
+        '"456","CLASSIC","4m 0s","240000"\n'
+        '"3","2024-01-01 11:00","201","Station Beta",'
+        '"2024-01-01 11:15","100","Station A End",'
+        '"789","CLASSIC","15m 0s","900000"\n'
+        '"4","2024-01-01 11:05","200","Station Alpha",'
+        '"2024-01-01 11:30","101","Station B End",'
+        '"12","CLASSIC","25m 0s","1500000"\n'
+        '"5","2024-01-01 11:30","201","Station Beta",'
+        '"2024-01-01 12:00","100","Station A End",'
+        '"345","CLASSIC","30m 0s","1800000"\n'
     )
     csv_path = tmp_path / "test_tfl_data.csv"
     csv_path.write_text(csv_content)
@@ -88,17 +99,24 @@ class TestTfLAdapter:
         from demandops.data.adapters import tfl as tfl_module
         from demandops.data.adapters.tfl import TfLAdapter
 
-        # Create two mock CSVs for a single month (Jan 2024 week 1 and week 2)
+        # Create two mock CSVs for a single month (Jan 2024, two bi-weekly files)
         header = (
-            "Rental Id,Duration,Bike Id,End Date,EndStation Id,EndStation Name,"
-            "Start Date,StartStation Id,StartStation Name\n"
+            '"Number","Start date","Start station number","Start station",'
+            '"End date","End station number","End station",'
+            '"Bike number","Bike model","Total duration","Total duration (ms)"\n'
         )
         week1 = header + (
-            "1,600,10,03/01/2024 10:10,99,End A,03/01/2024 10:00,500,Alpha\n"
-            "2,300,11,03/01/2024 10:20,99,End A,03/01/2024 10:05,501,Beta\n"
+            '"1","2024-01-03 10:00","500","Alpha",'
+            '"2024-01-03 10:10","99","End A",'
+            '"10","CLASSIC","10m","600000"\n'
+            '"2","2024-01-03 10:05","501","Beta",'
+            '"2024-01-03 10:20","99","End A",'
+            '"11","CLASSIC","15m","900000"\n'
         )
         week2 = header + (
-            "3,400,12,10/01/2024 14:30,99,End A,10/01/2024 14:00,500,Alpha\n"
+            '"3","2024-01-10 14:00","500","Alpha",'
+            '"2024-01-10 14:30","99","End A",'
+            '"12","CLASSIC","30m","1800000"\n'
         )
 
         raw_dir = tmp_path / "raw"
@@ -124,7 +142,12 @@ class TestTfLAdapter:
 
         # Verify schema columns match HourlyHistorySchema
         assert set(history_df.columns) == {
-            "zone_id", "zone_name", "hour_ts", "trip_count", "avg_fare", "avg_distance"
+            "zone_id",
+            "zone_name",
+            "hour_ts",
+            "trip_count",
+            "avg_fare",
+            "avg_distance",
         }
 
         # Verify dense grid: 2 stations × 744 hours (Jan has 31 days × 24h)
@@ -137,15 +160,13 @@ class TestTfLAdapter:
         from datetime import datetime
 
         s500_h10 = history_df.filter(
-            (pl.col("zone_id") == 500)
-            & (pl.col("hour_ts") == datetime(2024, 1, 3, 10))
+            (pl.col("zone_id") == 500) & (pl.col("hour_ts") == datetime(2024, 1, 3, 10))
         )
         assert s500_h10["trip_count"][0] == 1  # 1 trip from station 500 at that hour
 
         # Verify zero-fill: station 501 at hour 14 on Jan 10 had no trips
         s501_h14 = history_df.filter(
-            (pl.col("zone_id") == 501)
-            & (pl.col("hour_ts") == datetime(2024, 1, 10, 14))
+            (pl.col("zone_id") == 501) & (pl.col("hour_ts") == datetime(2024, 1, 10, 14))
         )
         assert s501_h14["trip_count"][0] == 0
 

@@ -4,6 +4,7 @@ Loads trained model artifacts from disk (does not retrain).
 Run `make train` first to produce artifacts.
 """
 
+import argparse
 from pathlib import Path
 
 import yaml
@@ -13,7 +14,11 @@ from demandops.training.train import load_trained_models
 
 
 def main() -> None:
-    config = yaml.safe_load(Path("configs/default.yaml").read_text())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/default.yaml")
+    args = parser.parse_args()
+
+    config = yaml.safe_load(Path(args.config).read_text())
 
     trained = load_trained_models(
         features_path=Path(config["data"]["processed_dir"]) / "features.parquet",

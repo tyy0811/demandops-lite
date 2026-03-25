@@ -18,30 +18,22 @@ from demandops.data.adapters.base import DatasetAdapter
 
 logger = structlog.get_logger()
 
-TFL_BASE_URL = "https://cycling.data.tfl.gov.uk/usage-stats"
+TFL_BASE_URL = "https://s3-eu-west-1.amazonaws.com/cycling.data.tfl.gov.uk"
 
-# Hardcoded filenames for Dec 2023 - Feb 2024.
-# No directory scraping — fragile and unnecessary for a fixed date range.
+# Hardcoded filenames for Dec 2023 - Feb 2024, verified against the live S3 bucket.
+# TfL uses bi-weekly CSVs (not weekly). No directory scraping.
 TFL_FILES: dict[str, list[str]] = {
     "2023-12": [
-        "393JourneyDataExtract29Nov2023-05Dec2023.csv",
-        "394JourneyDataExtract06Dec2023-12Dec2023.csv",
-        "395JourneyDataExtract13Dec2023-19Dec2023.csv",
-        "396JourneyDataExtract20Dec2023-26Dec2023.csv",
-        "397JourneyDataExtract27Dec2023-02Jan2024.csv",
+        "usage-stats/385JourneyDataExtract01Dec2023-14Dec2023.csv",
+        "usage-stats/386JourneyDataExtract15Dec2023-31Dec2023.csv",
     ],
     "2024-01": [
-        "398JourneyDataExtract03Jan2024-09Jan2024.csv",
-        "399JourneyDataExtract10Jan2024-16Jan2024.csv",
-        "400JourneyDataExtract17Jan2024-23Jan2024.csv",
-        "401JourneyDataExtract24Jan2024-30Jan2024.csv",
+        "usage-stats/387JourneyDataExtract01Jan2024-14Jan2024.csv",
+        "usage-stats/388JourneyDataExtract15Jan2024-31Jan2024.csv",
     ],
     "2024-02": [
-        "402JourneyDataExtract31Jan2024-06Feb2024.csv",
-        "403JourneyDataExtract07Feb2024-13Feb2024.csv",
-        "404JourneyDataExtract14Feb2024-20Feb2024.csv",
-        "405JourneyDataExtract21Feb2024-27Feb2024.csv",
-        "406JourneyDataExtract28Feb2024-05Mar2024.csv",
+        "usage-stats/389JourneyDataExtract01Feb2024-14Feb2024.csv",
+        "usage-stats/390JourneyDataExtract15Feb2024-29Feb2024.csv",
     ],
 }
 
@@ -70,12 +62,14 @@ class TfLAdapter(DatasetAdapter):
             if not files:
                 logger.warning("no_tfl_files_for_month", month=month)
                 continue
-            for filename in files:
-                dest = raw_dir / filename
+            for s3_key in files:
+                # s3_key includes "usage-stats/" prefix; save locally as just the filename
+                local_name = s3_key.split("/")[-1]
+                dest = raw_dir / local_name
                 if dest.exists():
                     logger.info("file_exists_skipping", path=str(dest))
                 else:
-                    url = f"{TFL_BASE_URL}/{filename}"
+                    url = f"{TFL_BASE_URL}/{s3_key}"
                     logger.info("downloading", url=url, dest=str(dest))
                     _atomic_download(url, dest)
                     logger.info("download_complete", path=str(dest))
@@ -85,23 +79,24 @@ class TfLAdapter(DatasetAdapter):
     def _parse_csv(self, csv_path: Path) -> pl.DataFrame:
         """Parse a single TfL CSV into a trips DataFrame.
 
-        Handles UK date format (DD/MM/YYYY HH:MM) and truncates to hour.
+        2023-2024 schema uses: "Start station number", "Start station",
+        "Start date" (YYYY-MM-DD HH:MM format). Truncates to hour.
         """
         df = pl.read_csv(csv_path, try_parse_dates=False)
 
         # Rename to common schema
         df = df.rename(
             {
-                "StartStation Id": "zone_id",
-                "StartStation Name": "zone_name",
+                "Start station number": "zone_id",
+                "Start station": "zone_name",
             }
         )
 
-        # Parse UK date: truncate to first 16 chars (inconsistent seconds)
+        # Parse date: YYYY-MM-DD HH:MM format, truncate to hour
         df = df.with_columns(
-            pl.col("Start Date")
+            pl.col("Start date")
             .str.slice(0, 16)
-            .str.to_datetime("%d/%m/%Y %H:%M")
+            .str.to_datetime("%Y-%m-%d %H:%M")
             .dt.truncate("1h")
             .alias("hour_ts")
         )
@@ -136,8 +131,9 @@ class TfLAdapter(DatasetAdapter):
         all_trips: list[pl.DataFrame] = []
         for month in months:
             files = TFL_FILES.get(month, [])
-            for filename in files:
-                csv_path = raw_dir / filename
+            for s3_key in files:
+                local_name = s3_key.split("/")[-1]
+                csv_path = raw_dir / local_name
                 if not csv_path.exists():
                     raise FileNotFoundError(
                         f"Missing TfL CSV: {csv_path}. Run download first. "

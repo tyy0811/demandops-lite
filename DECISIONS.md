@@ -161,3 +161,17 @@ If the MAE improvement had been marginal but Poisson eliminated negatives, the s
 For datasets with more zero-inflated demand or stronger count-data characteristics, Poisson would likely outperform. Both runs are recorded in MLflow experiment `objective-comparison`.
 
 **Alternative considered:** Switching to Poisson despite worse MAE, for the zero-negative guarantee. Rejected because the serving layer already clips, the clip rate is 1.4%, and Poisson trains 43% slower.
+
+## 20. DatasetAdapter Pattern for Pipeline Generality
+
+**Decision:** Abstract dataset-specific logic (download, raw-to-hourly aggregation, grid densification) behind a `DatasetAdapter` interface. All downstream code — feature engineering, training, evaluation, serving — operates on a common schema: `(zone_id, zone_name, hour_ts, trip_count)`.
+
+**Why:** Demonstrating the same pipeline on two datasets (NYC taxi, London bike-share) proves generality. The adapter boundary sits at the densification output: each adapter produces a dense hourly history DataFrame, and shared code handles everything downstream.
+
+TfL stations are mapped to `zone_id` via rename. The column name is a generic entity identifier — renaming to "entity_id" everywhere would touch 15+ files for no functional benefit.
+
+TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemens, Albatross). NYC + London demonstrates pipeline generality across cities and transport modes — stronger than two NYC datasets.
+
+**Result:** 802 TfL stations, 1.75M history rows, 1.15M feature rows. Slot mean MAE 0.75, LightGBM MAE 0.77. The simpler baseline is competitive on London bike-share because station-level demand has lower variance than NYC taxi zone demand — the historical average is hard to beat. LightGBM wins on RMSE (1.28 vs 1.31), consistent with its advantage on high-error outliers.
+
+**Alternative considered:** Citibike (NYC). Rejected — same city doesn't demonstrate geographic generality. Porto taxi dataset also considered but requires spatial binning of GPS trajectories, adding complexity that doesn't match the adapter pattern.

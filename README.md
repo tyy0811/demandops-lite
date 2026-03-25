@@ -2,11 +2,11 @@
 
 ![CI](https://github.com/tyy0811/demandops-lite/actions/workflows/ci.yaml/badge.svg)
 
-LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 90 tests.
+LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 99 tests.
 
 End-to-end demand prediction pipeline for NYC taxi data — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
 
-> **90 tests | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
+> **99 tests | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
 
 ## Benchmark Results
 
@@ -34,6 +34,21 @@ Full report: [`docs/benchmark_report.md`](docs/benchmark_report.md)
 | API contract | model_name only | + model_version, model_objective | Serving observability |
 
 See [DECISIONS.md](DECISIONS.md) for the reasoning behind each design choice.
+
+## Dual-Dataset Benchmark
+
+Same pipeline, two datasets, two cities:
+
+| Metric | NYC Taxi | London Bike-Share |
+|--------|----------|-------------------|
+| Zones/Stations | 261 | 802 |
+| Grid rows | 375K | 1.75M |
+| Feature rows | 289K | 1.15M |
+| Slot Mean MAE | 3.40 | **0.75** |
+| LightGBM MAE | **2.90** | 0.77 |
+| LightGBM vs Slot Mean | -14.6% | +1.9% |
+
+LightGBM dominates on NYC taxi data (high-variance demand, 14.6% MAE reduction). On London bike-share, the simpler slot mean is competitive — low-variance station demand means the historical average is hard to beat on MAE, though LightGBM wins on RMSE (1.28 vs 1.31). Both datasets use identical feature engineering, model training, and evaluation code via the DatasetAdapter pattern.
 
 ## Quick Start
 
@@ -136,7 +151,7 @@ demandops-lite/
 │   └── monitoring/
 │       └── checks.py             # Sparse zone, extreme prediction checks
 ├── scripts/                      # CLI entrypoints
-├── tests/                        # 90 tests
+├── tests/                        # 99 tests
 ├── docker/                       # Dockerfile + docker-compose
 ├── .github/workflows/ci.yaml     # GitHub Actions
 └── Makefile                      # Pipeline targets
@@ -260,7 +275,7 @@ docker-compose down
 ## Development
 
 ```bash
-make test       # Run 90 tests
+make test       # Run 99 tests
 make lint       # ruff check + format --check
 make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
@@ -271,7 +286,7 @@ make clean      # Remove generated data/artifacts
 - [x] Batch prediction endpoint (`/predict/batch`, up to 10K records)
 - [x] Poisson objective experiment (regression wins by 0.2% MAE; documented)
 - [x] MAE regression gate in CI (frozen fixture + threshold assertion)
-- [ ] Second dataset (TfL Cycle Hire) for pipeline generality
+- [x] Second dataset (TfL Cycle Hire) for pipeline generality
 
 ## Key Design Decisions
 

@@ -1,12 +1,14 @@
 # Data
 data/raw/*.parquet
 data/processed/*.parquet
+data/tfl/
 
 # Artifacts (generated output — ignore all contents)
 artifacts/models/*
 !artifacts/models/lightgbm.joblib
 artifacts/zone_universe.json
 artifacts/reports/*
+artifacts/tfl/
 
 # MLflow
 mlruns/

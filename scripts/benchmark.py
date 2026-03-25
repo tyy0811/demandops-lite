@@ -13,7 +13,13 @@ from demandops.training.train import train_all
 
 
 def main() -> None:
-    config = yaml.safe_load(Path("configs/default.yaml").read_text())
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/default.yaml")
+    args = parser.parse_args()
+
+    config = yaml.safe_load(Path(args.config).read_text())
 
     print("Training all models...")
     trained = train_all(
