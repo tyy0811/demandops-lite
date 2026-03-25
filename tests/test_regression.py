@@ -24,6 +24,12 @@ MAE_THRESHOLD = 3.20
 
 @pytest.fixture
 def model():
+    """Load raw LGBMRegressor (not LightGBMModel wrapper).
+
+    Intentional: testing raw predictions catches regressions before
+    the serving layer's np.clip(0) masks them. The non-negative test
+    acts as an early warning for when to consider Poisson objective.
+    """
     if not MODEL_PATH.exists():
         pytest.skip(f"Model not found at {MODEL_PATH}")
     import joblib

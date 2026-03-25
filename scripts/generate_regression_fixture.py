@@ -19,7 +19,7 @@ def main() -> None:
 
     _, _, test = split_from_config(df, config)
 
-    # Sample ~500 rows: 20 zones, all hours represented
+    # Select 20 zones across all test hours
     zone_ids = sorted(test["zone_id"].unique().to_list())
     selected_zones = zone_ids[:20]
 
