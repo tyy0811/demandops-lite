@@ -46,3 +46,13 @@ class ErrorDetail(BaseModel):
     supported_start: datetime | None = None
     supported_end: datetime | None = None
     n_supported_zones: int | None = None
+
+
+class BatchPredictRequest(BaseModel):
+    requests: list[PredictRequest] = Field(min_length=1, max_length=10_000)
+
+
+class BatchPredictResponse(BaseModel):
+    predictions: list[PredictResponse]
+    prediction_count: int
+    latency_ms: float

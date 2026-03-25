@@ -224,7 +224,7 @@ def mock_feature_service(zone_universe: dict) -> MagicMock:
 @pytest.fixture
 def mock_model() -> MagicMock:
     model = MagicMock()
-    model.predict.return_value = np.array([42.5])
+    model.predict.side_effect = lambda X: np.full(len(X), 42.5)
     return model
 
 

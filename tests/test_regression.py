@@ -4,6 +4,7 @@ The frozen test fixture and model artifact are committed to the repo.
 This test runs in CI on every push. If MAE exceeds the threshold,
 something changed that hurt predictions — investigate before merging.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
