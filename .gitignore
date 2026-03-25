@@ -4,6 +4,7 @@ data/processed/*.parquet
 
 # Artifacts (generated output — ignore all contents)
 artifacts/models/*
+!artifacts/models/lightgbm.joblib
 artifacts/zone_universe.json
 artifacts/reports/*
 
