@@ -104,9 +104,7 @@ class TestCitibikeAdapter:
         zone_ids = set(trips["zone_id"].to_list())
         assert zone_ids == {100003, 200001}
 
-    def test_filter_non_numeric_station_ids(
-        self, mock_citibike_csv_with_bad_ids, capsys
-    ) -> None:
+    def test_filter_non_numeric_station_ids(self, mock_citibike_csv_with_bad_ids, capsys) -> None:
         """Rows with non-numeric station IDs are dropped and logged."""
         from demandops.data.adapters.citibike import CitibikeAdapter
 
@@ -134,15 +132,13 @@ class TestCitibikeAdapter:
 
         # Station 100003 (1000.03), hour 10: 2 trips (R1 10:15, R2 10:45)
         s1000_h10 = hourly.filter(
-            (pl.col("zone_id") == 100003)
-            & (pl.col("hour_ts") == datetime(2024, 1, 1, 10))
+            (pl.col("zone_id") == 100003) & (pl.col("hour_ts") == datetime(2024, 1, 1, 10))
         )
         assert s1000_h10["trip_count"][0] == 2
 
         # Station 200001 (2000.01), hour 11: 2 trips (R3 11:00, R5 11:05)
         s2000_h11 = hourly.filter(
-            (pl.col("zone_id") == 200001)
-            & (pl.col("hour_ts") == datetime(2024, 1, 1, 11))
+            (pl.col("zone_id") == 200001) & (pl.col("hour_ts") == datetime(2024, 1, 1, 11))
         )
         assert s2000_h11["trip_count"][0] == 2
 
@@ -174,8 +170,12 @@ class TestCitibikeAdapter:
 
         # Verify schema columns
         assert set(history_df.columns) == {
-            "zone_id", "zone_name", "hour_ts", "trip_count",
-            "avg_fare", "avg_distance",
+            "zone_id",
+            "zone_name",
+            "hour_ts",
+            "trip_count",
+            "avg_fare",
+            "avg_distance",
         }
 
         # Verify dense grid: 2 stations x 2184 hours (Jan 1 00:00 - Mar 31 23:00)
@@ -183,15 +183,13 @@ class TestCitibikeAdapter:
 
         # Verify non-zero counts
         s500_h10 = history_df.filter(
-            (pl.col("zone_id") == 50001)
-            & (pl.col("hour_ts") == datetime(2024, 1, 3, 10))
+            (pl.col("zone_id") == 50001) & (pl.col("hour_ts") == datetime(2024, 1, 3, 10))
         )
         assert s500_h10["trip_count"][0] == 1
 
         # Verify zero-fill: station 50102 at hour 14 on Jan 10 had no trips
         s501_h14 = history_df.filter(
-            (pl.col("zone_id") == 50102)
-            & (pl.col("hour_ts") == datetime(2024, 1, 10, 14))
+            (pl.col("zone_id") == 50102) & (pl.col("hour_ts") == datetime(2024, 1, 10, 14))
         )
         assert s501_h14["trip_count"][0] == 0
 
@@ -208,12 +206,8 @@ class TestCitibikeAdapter:
         """Multiple CSVs in a zip are all extracted."""
         from demandops.data.adapters.citibike import _extract_csvs
 
-        csv1 = CITIBIKE_CSV_HEADER + _make_row(
-            "R1", "2024-01-01 10:00:00", "Alpha", "100.01"
-        )
-        csv2 = CITIBIKE_CSV_HEADER + _make_row(
-            "R2", "2024-01-15 12:00:00", "Beta", "200.02"
-        )
+        csv1 = CITIBIKE_CSV_HEADER + _make_row("R1", "2024-01-01 10:00:00", "Alpha", "100.01")
+        csv2 = CITIBIKE_CSV_HEADER + _make_row("R2", "2024-01-15 12:00:00", "Beta", "200.02")
 
         zip_path = tmp_path / "202401-citibike-tripdata.csv.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -315,8 +309,12 @@ class TestCitibikeAdapter:
             dest.write_bytes(zip_bytes)
 
         adapter = CitibikeAdapter()
-        with patch.object(citibike_module, "CITIBIKE_FILES", {"2024-01": "202401-citibike-tripdata.csv.zip"}), \
-             patch.object(citibike_module, "_atomic_download", side_effect=fake_download):
+        with (
+            patch.object(
+                citibike_module, "CITIBIKE_FILES", {"2024-01": "202401-citibike-tripdata.csv.zip"}
+            ),
+            patch.object(citibike_module, "_atomic_download", side_effect=fake_download),
+        ):
             paths = adapter.download(raw_dir, ["2024-01"])
 
         # Verify zip was downloaded and CSV extracted
@@ -338,8 +336,12 @@ class TestCitibikeAdapter:
         existing.write_text(CITIBIKE_CSV_HEADER)
 
         adapter = CitibikeAdapter()
-        with patch.object(citibike_module, "CITIBIKE_FILES", {"2024-01": "202401-citibike-tripdata.csv.zip"}), \
-             patch.object(citibike_module, "_atomic_download") as mock_dl:
+        with (
+            patch.object(
+                citibike_module, "CITIBIKE_FILES", {"2024-01": "202401-citibike-tripdata.csv.zip"}
+            ),
+            patch.object(citibike_module, "_atomic_download") as mock_dl,
+        ):
             paths = adapter.download(raw_dir, ["2024-01"])
 
         # Network should never be called

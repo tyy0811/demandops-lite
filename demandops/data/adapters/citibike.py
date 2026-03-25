@@ -107,10 +107,12 @@ class CitibikeAdapter(DatasetAdapter):
         )
         total_rows = len(df)
 
-        df = df.rename({
-            "start_station_id": "zone_id",
-            "start_station_name": "zone_name",
-        })
+        df = df.rename(
+            {
+                "start_station_id": "zone_id",
+                "start_station_name": "zone_name",
+            }
+        )
 
         # Station IDs are decimal strings like "4028.03" (NNNN.DD format).
         # Some have a single decimal digit ("3113.1" == "3113.10").
@@ -134,9 +136,10 @@ class CitibikeAdapter(DatasetAdapter):
         # Normalize: pad single-digit decimals to 2 digits, remove dot, cast to int
         # "4028.03" -> "402803", "3113.1" -> "3113.10" -> "311310"
         df = df.with_columns(
-            pl.col("zone_id").cast(pl.Utf8)
+            pl.col("zone_id")
+            .cast(pl.Utf8)
             .str.replace(r"\.(\d)$", ".${1}0")  # pad "3113.1" -> "3113.10"
-            .str.replace(r"\.", "")            # remove dot
+            .str.replace(r"\.", "")  # remove dot
             .cast(pl.Int64)
         )
 
@@ -204,9 +207,7 @@ class CitibikeAdapter(DatasetAdapter):
         zone_ids = sorted(hourly["zone_id"].unique().to_list())
         logger.info("citibike_stations_found", n_stations=len(zone_ids))
 
-        zone_name_lookup = trips_df.group_by("zone_id").agg(
-            pl.col("zone_name").first()
-        )
+        zone_name_lookup = trips_df.group_by("zone_id").agg(pl.col("zone_name").first())
 
         # Densify with DuckDB cross-join
         con = duckdb.connect()
@@ -251,12 +252,16 @@ class CitibikeAdapter(DatasetAdapter):
             pl.lit(None).cast(pl.Float64).alias("avg_distance"),
         )
 
-        dense_df = dense_df.select([
-            "zone_id", "zone_name", "hour_ts", "trip_count",
-            "avg_fare", "avg_distance",
-        ])
-
-        logger.info(
-            "citibike_history_prepared", rows=len(dense_df), stations=len(zone_ids)
+        dense_df = dense_df.select(
+            [
+                "zone_id",
+                "zone_name",
+                "hour_ts",
+                "trip_count",
+                "avg_fare",
+                "avg_distance",
+            ]
         )
+
+        logger.info("citibike_history_prepared", rows=len(dense_df), stations=len(zone_ids))
         return dense_df, zone_ids
