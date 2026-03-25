@@ -3,6 +3,7 @@
 One-time script. Output is committed to repo and never regenerated
 unless the model/features are intentionally changed.
 """
+
 from pathlib import Path
 
 import polars as pl

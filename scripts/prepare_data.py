@@ -1,4 +1,5 @@
 """Script entrypoint for data preparation."""
+
 import argparse
 from pathlib import Path
 

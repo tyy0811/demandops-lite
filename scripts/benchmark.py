@@ -41,33 +41,46 @@ def main() -> None:
     _generate_markdown_report(report, config, trained)
 
 
-def _generate_markdown_report(
-    report: dict, config: dict, trained: dict
-) -> None:
-    zone_universe = json.loads(
-        Path(config["artifacts"]["zone_universe_path"]).read_text()
-    )
+# Dataset display names for benchmark reports
+DATASET_LABELS: dict[str, str] = {
+    "taxi": "NYC Taxi Demand Prediction",
+    "tfl": "London Cycle Hire Demand Prediction",
+}
+
+ENTITY_LABELS: dict[str, str] = {
+    "taxi": "pickup zone",
+    "tfl": "docking station",
+}
+
+
+def _generate_markdown_report(report: dict, config: dict, trained: dict) -> None:
+    zone_universe = json.loads(Path(config["artifacts"]["zone_universe_path"]).read_text())
+
+    adapter_name = config.get("dataset", {}).get("adapter", "taxi")
+    dataset_label = DATASET_LABELS.get(adapter_name, adapter_name)
+    entity_label = ENTITY_LABELS.get(adapter_name, "zone")
 
     # Compute grid size from features parquet
     features_path = Path(config["data"]["processed_dir"]) / "features.parquet"
     features_df = pl.read_parquet(features_path)
     n_features_rows = len(features_df)
 
+    split_cfg = config["split"]
+
     lines = [
-        "## Benchmark Results — NYC Taxi Demand Prediction\n",
-        f"**Dataset:** NYC TLC Yellow Taxi, Jan–Feb 2024 (Dec 2023 for warm-up)",
-        f"**Target:** Hourly trip count per pickup zone",
-        f"**Zones:** {zone_universe['n_zones']} (from zone_universe.json)",
+        f"## Benchmark Results — {dataset_label}\n",
+        f"**Target:** Hourly trip count per {entity_label}",
+        f"**Entities:** {zone_universe['n_zones']} (from zone_universe.json)",
         (
             f"**Grid:** {n_features_rows:,} rows "
-            f"({zone_universe['n_zones']} zones × hourly, Jan–Feb 2024)"
+            f"({zone_universe['n_zones']} {entity_label}s × hourly)"
         ),
         (
-            f"**Train:** [2024-01-01, 2024-02-01) | "
-            f"**Val:** [2024-02-01, 2024-02-15) | "
-            f"**Test:** [2024-02-15, 2024-03-01)"
+            f"**Train:** [{split_cfg['train_start'][:10]}, {split_cfg['train_end'][:10]}) | "
+            f"**Val:** [{split_cfg['train_end'][:10]}, {split_cfg['val_end'][:10]}) | "
+            f"**Test:** [{split_cfg['val_end'][:10]}, {split_cfg['test_end'][:10]})"
         ),
-        f"**Features:** 9 (temporal + lag)",
+        "**Features:** 9 (temporal + lag)",
         "",
     ]
 
@@ -145,15 +158,14 @@ def _generate_markdown_report(
             else:
                 delta_str = "—"
             lines.append(
-                f"| {seg} | {defn} | {data['n_rows']} | "
-                f"{sm_str} | {lg_str} | {delta_str} |"
+                f"| {seg} | {defn} | {data['n_rows']} | {sm_str} | {lg_str} | {delta_str} |"
             )
 
     # --- Hardest Zones ---
     if report.get("per_zone_top5"):
-        lines.append("\n### Hardest Zones (by LightGBM MAE)\n")
-        lines.append("| Zone ID | Zone Name | MAE | Mean Demand |")
-        lines.append("|---------|-----------|-----|-------------|")
+        lines.append(f"\n### Hardest {entity_label.title()}s (by LightGBM MAE)\n")
+        lines.append("| ID | Name | MAE | Mean Demand |")
+        lines.append("|----|------|-----|-------------|")
         for entry in report["per_zone_top5"]:
             lines.append(
                 f"| {entry['zone_id']} | {entry.get('zone_name', 'Unknown')} | "
@@ -184,7 +196,11 @@ def _generate_markdown_report(
         run_id = info.get("run_id", "—")
         lines.append(f"| {name} | `{run_id}` |")
 
-    report_path = Path("docs/benchmark_report.md")
+    # Dataset-specific report path
+    if adapter_name == "taxi":
+        report_path = Path("docs/benchmark_report.md")
+    else:
+        report_path = Path(f"docs/benchmark_report_{adapter_name}.md")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines) + "\n")
     print(f"\nBenchmark report saved to {report_path}")

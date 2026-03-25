@@ -36,8 +36,10 @@ def main() -> None:
 
     print("\n=== Model Comparison ===")
     for name, metrics in report["model_comparison"].items():
-        print(f"{name}: MAE={metrics['mae']:.4f} RMSE={metrics['rmse']:.4f} "
-              f"sMAPE={metrics['smape']:.2f}%")
+        print(
+            f"{name}: MAE={metrics['mae']:.4f} RMSE={metrics['rmse']:.4f} "
+            f"sMAPE={metrics['smape']:.2f}%"
+        )
 
 
 if __name__ == "__main__":

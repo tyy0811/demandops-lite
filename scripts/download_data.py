@@ -1,4 +1,5 @@
 """Script entrypoint for data download."""
+
 import argparse
 from pathlib import Path
 
@@ -21,9 +22,7 @@ def main() -> None:
         adapter=adapter,
         months=config["data"]["months"],
         raw_dir=Path(config["data"]["raw_dir"]),
-        zones_path=Path(config["data"]["zones_path"])
-        if "zones_path" in config["data"]
-        else None,
+        zones_path=Path(config["data"]["zones_path"]) if "zones_path" in config["data"] else None,
     )
 
 
