@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 
 
 class PredictRequest(BaseModel):
-    zone_id: int = Field(ge=1, le=263)
+    # No upper bound -- supports taxi zones (1-263) and TfL stations (higher IDs)
+    zone_id: int = Field(ge=1)
     hour_ts: datetime
 
 

@@ -1,22 +1,28 @@
 """Script entrypoint for data preparation."""
-
+import argparse
 from pathlib import Path
 
 import yaml
 
+from demandops.data.adapters import get_adapter
 from demandops.data.prepare import prepare
 
 
 def main() -> None:
-    config = yaml.safe_load(Path("configs/default.yaml").read_text())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/default.yaml")
+    args = parser.parse_args()
+
+    config = yaml.safe_load(Path(args.config).read_text())
+    adapter_name = config.get("dataset", {}).get("adapter", "taxi")
+    adapter = get_adapter(adapter_name)
+
     prepare(
+        adapter=adapter,
         raw_dir=Path(config["data"]["raw_dir"]),
         processed_dir=Path(config["data"]["processed_dir"]),
-        zones_path=Path(config["data"]["zones_path"]),
         zone_universe_path=Path(config["artifacts"]["zone_universe_path"]),
-        months=config["data"]["months"],
-        lag_hours=config["features"]["lag_hours"],
-        rolling_windows=config["features"]["rolling_windows"],
+        config=config,
     )
 
 

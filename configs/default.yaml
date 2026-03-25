@@ -1,3 +1,6 @@
+dataset:
+  adapter: taxi
+
 data:
   raw_dir: data/raw
   processed_dir: data/processed

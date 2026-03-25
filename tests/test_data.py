@@ -146,11 +146,11 @@ class TestTemporalSplit:
 class TestAtomicDownload:
     def test_partial_download_leaves_no_file(self, tmp_path: Path) -> None:
         """Interrupted download must not leave a partial destination file."""
-        from demandops.data.download import _atomic_download
+        from demandops.data.adapters.taxi import _atomic_download
 
         dest = tmp_path / "test.parquet"
         with patch(
-            "demandops.data.download.urlretrieve",
+            "demandops.data.adapters.taxi.urlretrieve",
             side_effect=ConnectionError("interrupted"),
         ):
             with pytest.raises(ConnectionError):
@@ -162,14 +162,14 @@ class TestAtomicDownload:
 
     def test_successful_download_produces_dest(self, tmp_path: Path) -> None:
         """Successful download should produce the destination file atomically."""
-        from demandops.data.download import _atomic_download
+        from demandops.data.adapters.taxi import _atomic_download
 
         dest = tmp_path / "test.csv"
 
         def fake_retrieve(url, path):
             Path(path).write_text("data")
 
-        with patch("demandops.data.download.urlretrieve", side_effect=fake_retrieve):
+        with patch("demandops.data.adapters.taxi.urlretrieve", side_effect=fake_retrieve):
             _atomic_download("http://example.com/test.csv", dest)
 
         assert dest.exists()

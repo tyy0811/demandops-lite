@@ -1,67 +1,28 @@
-"""Download NYC TLC Yellow Taxi trip data and zone lookup.
-
-Uses urllib.request.urlretrieve — no progress bar or retry.
-Acceptable for V1; the TLC CDN is generally reliable.
-Downloads are atomic: writes to a .tmp file first, renames on success.
-If a download is interrupted, the .tmp file is cleaned up and a
-subsequent `make download` will re-fetch correctly.
-"""
+"""Download raw data using the appropriate dataset adapter."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.request import urlretrieve
 
 import structlog
 
+from demandops.data.adapters.base import DatasetAdapter
+
 logger = structlog.get_logger()
 
-TLC_BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-ZONES_URL = "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
 
+def download_all(
+    adapter: DatasetAdapter,
+    months: list[str],
+    raw_dir: Path,
+    zones_path: Path | None = None,
+) -> dict:
+    """Download all data using the adapter. Returns dict with paths."""
+    month_paths = adapter.download(raw_dir, months)
+    result: dict = {"months": month_paths}
 
-def _atomic_download(url: str, dest: Path) -> None:
-    """Download to a temp file, then atomically rename on success."""
-    tmp = dest.with_suffix(dest.suffix + ".tmp")
-    try:
-        urlretrieve(url, tmp)
-        tmp.rename(dest)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    if hasattr(adapter, "download_zones") and zones_path is not None:
+        zone_path = adapter.download_zones(zones_path)
+        result["zones"] = zone_path
 
-
-def download_month(month: str, raw_dir: Path) -> Path:
-    """Download a single month of yellow taxi data. Idempotent."""
-    filename = f"yellow_tripdata_{month}.parquet"
-    dest = raw_dir / filename
-    if dest.exists():
-        logger.info("file_exists_skipping", path=str(dest))
-        return dest
-
-    url = f"{TLC_BASE_URL}/{filename}"
-    logger.info("downloading", url=url, dest=str(dest))
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_download(url, dest)
-    logger.info("download_complete", path=str(dest))
-    return dest
-
-
-def download_zones(zones_path: Path) -> Path:
-    """Download TLC zone lookup CSV. Idempotent."""
-    if zones_path.exists():
-        logger.info("file_exists_skipping", path=str(zones_path))
-        return zones_path
-
-    logger.info("downloading_zones", url=ZONES_URL, dest=str(zones_path))
-    zones_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_download(ZONES_URL, zones_path)
-    logger.info("download_complete", path=str(zones_path))
-    return zones_path
-
-
-def download_all(months: list[str], raw_dir: Path, zones_path: Path) -> dict:
-    """Download all months + zone lookup. Returns dict with paths."""
-    month_paths = [download_month(m, raw_dir) for m in months]
-    zone_path = download_zones(zones_path)
-    return {"months": month_paths, "zones": zone_path}
+    return result
