@@ -40,7 +40,6 @@ class HealthResponse(BaseModel):
     supported_start: datetime | None = None
     supported_end: datetime | None = None
     n_supported_zones: int = 0
-    zones_supported: list[int] = Field(default_factory=list)
     history_rows: int = 0
     uptime_seconds: float
 

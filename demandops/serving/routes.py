@@ -239,7 +239,6 @@ async def health(request: Request):
 
     model_objective = getattr(request.app.state, "model_objective", "regression")
     model_version = getattr(request.app.state, "model_version", "v1")
-    zones = sorted(svc.zone_universe) if history_loaded else []
 
     return HealthResponse(
         status="healthy" if model_loaded and history_loaded else "degraded",
@@ -251,7 +250,6 @@ async def health(request: Request):
         supported_start=svc.supported_start if history_loaded else None,
         supported_end=svc.supported_end if history_loaded else None,
         n_supported_zones=svc.n_supported_zones if history_loaded else 0,
-        zones_supported=zones,
         history_rows=len(svc.history) if history_loaded else 0,
         uptime_seconds=time.time() - start_time if start_time else 0,
     )

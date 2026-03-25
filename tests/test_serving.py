@@ -94,10 +94,6 @@ class TestHealthEndpoint:
         assert data["model_objective"] == "regression"
         assert data["model_version"] == "lightgbm-regression"
 
-    def test_health_includes_zones_supported(self, test_client) -> None:
-        data = test_client.get("/health").json()
-        assert data["zones_supported"] == [1, 2, 3]
-
 
 class TestMetricsEndpoint:
     def test_metrics_returns_text_plain(self, test_client) -> None:
