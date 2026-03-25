@@ -42,6 +42,8 @@ def configure(
     model_name: str,
     start_time: float,
     model_artifact_loaded: bool = True,
+    model_objective: str = "regression",
+    model_version: str = "v1",
 ):
     """Store dependencies on app.state (fix #8: no module-level globals)."""
     app.state.feature_service = feature_service
@@ -49,6 +51,8 @@ def configure(
     app.state.model_name = model_name
     app.state.start_time = start_time
     app.state.model_artifact_loaded = model_artifact_loaded
+    app.state.model_objective = model_objective
+    app.state.model_version = model_version
 
 
 @router.post("/predict", response_model=PredictResponse)
@@ -58,6 +62,7 @@ async def predict(body: PredictRequest, request: Request):
     svc = request.app.state.feature_service
     model = request.app.state.model
     model_name = request.app.state.model_name
+    model_version = request.app.state.model_version
 
     try:
         result = svc.get_features(body.zone_id, body.hour_ts)
@@ -92,12 +97,21 @@ async def predict(body: PredictRequest, request: Request):
         REQUEST_COUNT.labels(endpoint="/predict", status="200").inc()
         REQUEST_LATENCY.labels(endpoint="/predict").observe(time.perf_counter() - start)
 
+        logger.info(
+            "prediction",
+            zone_id=body.zone_id,
+            predicted_count=round(predicted_count, 4),
+            latency_ms=round(latency_ms, 2),
+            request_id=request_id,
+        )
+
         return PredictResponse(
             zone_id=body.zone_id,
             zone_name=svc.get_zone_name(body.zone_id),
             hour_ts=body.hour_ts,
             predicted_count=predicted_count,
             model_name=model_name,
+            model_version=model_version,
             metadata=PredictionMetadata(
                 latency_ms=latency_ms,
                 request_id=request_id,
@@ -122,6 +136,7 @@ async def predict_batch(body: BatchPredictRequest, request: Request):
     svc = request.app.state.feature_service
     model = request.app.state.model
     model_name = request.app.state.model_name
+    model_version = request.app.state.model_version
 
     try:
         # Phase 1: Collect features for all requests (all-or-nothing validation)
@@ -174,6 +189,7 @@ async def predict_batch(body: BatchPredictRequest, request: Request):
                     hour_ts=req.hour_ts,
                     predicted_count=predicted_count,
                     model_name=model_name,
+                    model_version=model_version,
                     metadata=PredictionMetadata(
                         latency_ms=0.0,  # Individual latency not meaningful in batch
                         request_id="batch",
@@ -221,14 +237,21 @@ async def health(request: Request):
     HISTORY_LOADED.set(1 if history_loaded else 0)
     REQUEST_COUNT.labels(endpoint="/health", status="200").inc()
 
+    model_objective = getattr(request.app.state, "model_objective", "regression")
+    model_version = getattr(request.app.state, "model_version", "v1")
+    zones = sorted(svc.zone_universe) if history_loaded else []
+
     return HealthResponse(
         status="healthy" if model_loaded and history_loaded else "degraded",
         model_loaded=model_loaded,
         model_name=model_name or "none",
+        model_objective=model_objective,
+        model_version=model_version,
         history_loaded=history_loaded,
         supported_start=svc.supported_start if history_loaded else None,
         supported_end=svc.supported_end if history_loaded else None,
         n_supported_zones=svc.n_supported_zones if history_loaded else 0,
+        zones_supported=zones,
         history_rows=len(svc.history) if history_loaded else 0,
         uptime_seconds=time.time() - start_time if start_time else 0,
     )

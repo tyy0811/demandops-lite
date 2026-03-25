@@ -26,6 +26,7 @@ class PredictResponse(BaseModel):
     hour_ts: datetime
     predicted_count: float = Field(ge=0.0)
     model_name: str
+    model_version: str
     metadata: PredictionMetadata
 
 
@@ -33,10 +34,13 @@ class HealthResponse(BaseModel):
     status: Literal["healthy", "degraded"]
     model_loaded: bool
     model_name: str
+    model_objective: str
+    model_version: str
     history_loaded: bool
     supported_start: datetime | None = None
     supported_end: datetime | None = None
     n_supported_zones: int = 0
+    zones_supported: list[int] = Field(default_factory=list)
     history_rows: int = 0
     uptime_seconds: float
 

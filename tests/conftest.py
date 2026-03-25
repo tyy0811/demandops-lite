@@ -242,6 +242,8 @@ def test_app(mock_feature_service, mock_model):
         "lightgbm",
         time.time(),
         model_artifact_loaded=True,
+        model_objective="regression",
+        model_version="lightgbm-regression",
     )
     return app
 

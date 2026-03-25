@@ -26,6 +26,7 @@ models:
     name: seasonal_naive
   lightgbm:
     name: lightgbm
+    objective: regression
     n_estimators: 500
     learning_rate: 0.05
     max_depth: 6

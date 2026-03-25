@@ -1,10 +1,10 @@
 # demandops-lite
 
-LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 77 tests.
+LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 91 tests.
 
 End-to-end demand prediction pipeline for NYC taxi data — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
 
-> **77 tests | 39 commits | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
+> **91 tests | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
 
 ## Benchmark Results
 
@@ -70,8 +70,9 @@ NYC TLC Parquet → DuckDB (filter/aggregate/densify) → Polars (features) → 
 
 - **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines
 - **Data contracts**: Pandera validation at every pipeline boundary
-- **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking
+- **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking, objective experiments
 - **Train-serve parity**: FeatureService reconstructs identical lag features at inference time
+- **Batch inference**: `/predict/batch` for up to 10K vectorized predictions per request
 - **Monitoring**: Prometheus counters, latency histograms, prediction distribution
 - **Production patterns**: Docker, CI, structured logging, config-driven, graceful degradation
 
@@ -114,7 +115,7 @@ demandops-lite/
 │   │   └── evaluate.py           # Metrics, per-zone analysis, edge cases
 │   ├── serving/
 │   │   ├── app.py                # FastAPI factory (graceful degradation)
-│   │   ├── routes.py             # /predict, /health, /metrics
+│   │   ├── routes.py             # /predict, /predict/batch, /health, /metrics
 │   │   ├── feature_service.py    # Lag reconstruction from dense history
 │   │   ├── schemas.py            # Pydantic request/response models
 │   │   ├── metrics.py            # Prometheus counters/histograms
@@ -122,7 +123,7 @@ demandops-lite/
 │   └── monitoring/
 │       └── checks.py             # Sparse zone, extreme prediction checks
 ├── scripts/                      # CLI entrypoints
-├── tests/                        # 77 tests
+├── tests/                        # 91 tests
 ├── docker/                       # Dockerfile + docker-compose
 ├── .github/workflows/ci.yaml     # GitHub Actions
 └── Makefile                      # Pipeline targets
@@ -167,8 +168,10 @@ Run `make benchmark` after `make pipeline` to generate `docs/benchmark_report.md
 
 ### POST /predict
 
-```json
-{"zone_id": 161, "hour_ts": "2024-02-20T14:00:00"}
+```bash
+curl -X POST http://localhost:8001/predict \
+  -H "Content-Type: application/json" \
+  -d '{"zone_id": 161, "hour_ts": "2024-02-20T14:00:00"}'
 ```
 
 Response:
@@ -180,6 +183,7 @@ Response:
   "hour_ts": "2024-02-20T14:00:00",
   "predicted_count": 42.3,
   "model_name": "lightgbm",
+  "model_version": "lightgbm-regression",
   "metadata": {
     "latency_ms": 12.4,
     "request_id": "abc-123",
@@ -191,9 +195,37 @@ Response:
 
 **Rejection (422):** unsupported zone_id or hour_ts outside [2024-01-01, 2024-03-01).
 
+### POST /predict/batch
+
+Up to 10,000 predictions in a single request. All-or-nothing validation: one bad zone_id fails the entire batch.
+
+```bash
+curl -X POST http://localhost:8001/predict/batch \
+  -H "Content-Type: application/json" \
+  -d '{"requests": [
+    {"zone_id": 161, "hour_ts": "2024-02-20T14:00:00"},
+    {"zone_id": 162, "hour_ts": "2024-02-20T14:00:00"},
+    {"zone_id": 163, "hour_ts": "2024-02-20T14:00:00"}
+  ]}'
+```
+
+Response:
+
+```json
+{
+  "predictions": [
+    {"zone_id": 161, "predicted_count": 42.3, "model_name": "lightgbm", "model_version": "lightgbm-regression", "...": "..."},
+    {"zone_id": 162, "predicted_count": 18.1, "...": "..."},
+    {"zone_id": 163, "predicted_count": 7.5, "...": "..."}
+  ],
+  "prediction_count": 3,
+  "latency_ms": 15.2
+}
+```
+
 ### GET /health
 
-Returns model/history load status. Reports `"degraded"` if artifacts are missing — the app starts but cannot serve predictions.
+Returns model/history load status, model objective, version, and supported zones. Reports `"degraded"` if artifacts are missing — the app starts but cannot serve predictions.
 
 ### GET /metrics
 
@@ -215,7 +247,7 @@ docker-compose down
 ## Development
 
 ```bash
-make test       # Run 77 tests
+make test       # Run 91 tests
 make lint       # ruff check + format --check
 make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
@@ -223,10 +255,11 @@ make clean      # Remove generated data/artifacts
 
 ## V2 Roadmap
 
+- [x] Batch prediction endpoint (`/predict/batch`, up to 10K records)
+- [x] Poisson objective experiment (regression wins by 0.2% MAE; documented)
+- [x] MAE regression gate in CI (frozen fixture + threshold assertion)
+- [ ] Second dataset (TfL Cycle Hire) for pipeline generality
 - [ ] Weather features (OpenWeather history join)
-- [ ] Batch prediction endpoint
-- [ ] Second dataset (Citibike or energy demand) for pipeline generality
-- [ ] Poisson objective for native non-negative predictions
 
 ## Key Design Decisions
 
@@ -235,7 +268,7 @@ See [DECISIONS.md](DECISIONS.md) for the full rationale behind:
 - Polars for feature engineering (not pandas)
 - Dense grid with December warm-up (not sparse)
 - Weekday convention: 0=Mon, 6=Sun everywhere
-- LightGBM predictions clipped to zero (not constrained objective)
+- LightGBM predictions clipped to zero (Poisson tested, regression wins by 0.2% MAE)
 - joblib for model serialization (not Booster text format)
 - `app.state` for dependency injection (not module globals)
 - Pandera validation at every pipeline boundary

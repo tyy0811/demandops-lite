@@ -37,6 +37,7 @@ class TestPredictEndpoint:
         assert data["zone_id"] == 1
         assert data["predicted_count"] == 42.5
         assert data["model_name"] == "lightgbm"
+        assert data["model_version"] == "lightgbm-regression"
 
     def test_unsupported_zone(self, test_client) -> None:
         resp = test_client.post(
@@ -88,6 +89,15 @@ class TestHealthEndpoint:
         assert "supported_start" in data
         assert "supported_end" in data
 
+    def test_health_includes_model_objective(self, test_client) -> None:
+        data = test_client.get("/health").json()
+        assert data["model_objective"] == "regression"
+        assert data["model_version"] == "lightgbm-regression"
+
+    def test_health_includes_zones_supported(self, test_client) -> None:
+        data = test_client.get("/health").json()
+        assert data["zones_supported"] == [1, 2, 3]
+
 
 class TestMetricsEndpoint:
     def test_metrics_returns_text_plain(self, test_client) -> None:
@@ -125,6 +135,8 @@ class TestDegradedHealth:
             "lightgbm",
             time.time(),
             model_artifact_loaded=False,
+            model_objective="regression",
+            model_version="lightgbm-regression",
         )
         return TestClient(app)
 
@@ -144,6 +156,8 @@ class TestDegradedHealth:
             "lightgbm",
             time.time(),
             model_artifact_loaded=False,
+            model_objective="regression",
+            model_version="lightgbm-regression",
         )
         return TestClient(app)
 
@@ -222,6 +236,7 @@ class TestBatchPredictEndpoint:
         for pred in data["predictions"]:
             assert pred["predicted_count"] == 42.5
             assert pred["model_name"] == "lightgbm"
+            assert pred["model_version"] == "lightgbm-regression"
 
     def test_single_item_batch(self, test_client) -> None:
         """Batch of 1 item works (min_length=1)."""
@@ -281,3 +296,11 @@ class TestBatchPredictEndpoint:
             },
         )
         assert resp.json()["latency_ms"] > 0
+
+    def test_oversized_batch_rejected(self, test_client) -> None:
+        """Batch exceeding max_length=10_000 returns 422."""
+        resp = test_client.post(
+            "/predict/batch",
+            json={"requests": [{"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"}] * 10_001},
+        )
+        assert resp.status_code == 422

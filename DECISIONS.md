@@ -1,6 +1,6 @@
 # Design Decisions
 
-Rationale behind the key technical choices in demandops-lite V1.
+Rationale behind the key technical choices in demandops-lite.
 
 ## 1. DuckDB for Aggregation
 
@@ -30,13 +30,22 @@ Rationale behind the key technical choices in demandops-lite V1.
 
 **Why:** A single convention eliminates a class of off-by-one bugs. Python's convention is the natural choice because `FeatureService` uses `datetime.weekday()` at serving time. Making the training pipeline match (by subtracting 1 from Polars) ensures train-serve parity. `is_weekend = day_of_week >= 5` is correct under both.
 
-## 5. LightGBM Predictions Clipped to Zero
+## 5. LightGBM Predictions Clipped to Zero (Validated by Experiment)
 
-**Decision:** `predict()` returns `np.clip(raw, 0.0, None)`. `predict_raw()` returns unclipped values for tracking clip statistics.
+**Decision:** `predict()` returns `np.clip(raw, 0.0, None)`. `predict_raw()` returns unclipped values for tracking clip statistics. Default objective remains `regression` (L2).
 
 **Why:** Trip counts are non-negative by definition. LightGBM's regression objective can produce small negative predictions near zero. Clipping is simpler and more interpretable than a constrained objective (Poisson, Tweedie). The `predict_raw()` method allows accurate tracking of how many predictions required clipping — important for monitoring model quality.
 
-**Alternative considered:** Poisson regression objective. Rejected because it constrains the entire prediction surface for what is a boundary-only problem. Clipping is transparent and reversible.
+**Empirical validation:** Ran a controlled experiment comparing regression vs Poisson objectives with identical hyperparameters on the same train/val/test split (`scripts/compare_objectives.py`):
+
+| Objective | Test MAE | Negative Raw Preds | Best Iteration | Time |
+|-----------|----------|-------------------|----------------|------|
+| regression | 2.8997 | 1,344 (1.4%) | 455 | 2.8s |
+| poisson | 2.9066 | 0 (0.0%) | 500 | 4.0s |
+
+Regression wins by 0.2% MAE. Poisson eliminates all negative predictions, but 1.4% clip rate is negligible in practice and handled transparently by `np.clip`. Both runs logged to MLflow experiment `objective-comparison`.
+
+**Alternative considered:** Poisson regression objective. Empirically tested and rejected: 0.2% worse MAE, 43% slower training, and the problem Poisson solves (negative predictions) affects only 1.4% of outputs and is already handled by clipping.
 
 ## 6. joblib for Model Serialization
 

@@ -166,3 +166,21 @@ class TestLightGBM:
         preds_after = loaded.predict(X[:10])
 
         np.testing.assert_array_almost_equal(preds_before, preds_after)
+
+
+class TestLightGBMObjective:
+    def test_default_objective_is_regression(self) -> None:
+        """Default objective should be regression (L2)."""
+        from demandops.models.lightgbm_model import LightGBMModel
+
+        model = LightGBMModel()
+        params = model.get_params()
+        assert params["objective"] == "regression"
+
+    def test_poisson_objective_accepted(self) -> None:
+        """Poisson objective should be accepted without error."""
+        from demandops.models.lightgbm_model import LightGBMModel
+
+        model = LightGBMModel(objective="poisson")
+        params = model.get_params()
+        assert params["objective"] == "poisson"
