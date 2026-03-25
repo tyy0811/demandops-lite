@@ -41,6 +41,7 @@ TFL_FILES: dict[str, list[str]] = {
         "403JourneyDataExtract07Feb2024-13Feb2024.csv",
         "404JourneyDataExtract14Feb2024-20Feb2024.csv",
         "405JourneyDataExtract21Feb2024-27Feb2024.csv",
+        "406JourneyDataExtract28Feb2024-05Mar2024.csv",
     ],
 }
 
@@ -129,17 +130,21 @@ class TfLAdapter(DatasetAdapter):
     ) -> tuple[pl.DataFrame, list[int]]:
         months = config["data"]["months"]
 
-        # Parse and concatenate all CSV files
+        # Parse and concatenate all CSV files — every file must be present.
+        # A missing weekly extract would silently become zero-demand rows after
+        # densification, corrupting the benchmark dataset.
         all_trips: list[pl.DataFrame] = []
         for month in months:
             files = TFL_FILES.get(month, [])
             for filename in files:
                 csv_path = raw_dir / filename
-                if csv_path.exists():
-                    trips = self._parse_csv(csv_path)
-                    all_trips.append(trips)
-                else:
-                    logger.warning("csv_not_found", path=str(csv_path))
+                if not csv_path.exists():
+                    raise FileNotFoundError(
+                        f"Missing TfL CSV: {csv_path}. Run download first. "
+                        f"A missing file would corrupt the dense grid with synthetic zeros."
+                    )
+                trips = self._parse_csv(csv_path)
+                all_trips.append(trips)
 
         if not all_trips:
             raise FileNotFoundError("No TfL CSV files found. Run download first.")

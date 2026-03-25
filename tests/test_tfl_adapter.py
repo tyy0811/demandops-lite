@@ -80,3 +80,15 @@ class TestTfLAdapter:
             (pl.col("zone_id") == 201) & (pl.col("hour_ts") == datetime(2024, 1, 1, 11))
         )
         assert s201_h11["trip_count"][0] == 2
+
+    def test_missing_csv_raises_error(self, tmp_path) -> None:
+        """Missing CSV file raises FileNotFoundError, not silent zeros."""
+        from demandops.data.adapters.tfl import TfLAdapter
+
+        adapter = TfLAdapter()
+        config = {
+            "data": {"months": ["2024-01"]},
+        }
+        # raw_dir exists but has no CSV files
+        with pytest.raises(FileNotFoundError, match="Missing TfL CSV"):
+            adapter.prepare_hourly_history(tmp_path, tmp_path, config)
