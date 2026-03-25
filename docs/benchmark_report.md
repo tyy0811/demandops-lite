@@ -1,9 +1,8 @@
 ## Benchmark Results — NYC Taxi Demand Prediction
 
-**Dataset:** NYC TLC Yellow Taxi, Jan–Feb 2024 (Dec 2023 for warm-up)
 **Target:** Hourly trip count per pickup zone
-**Zones:** 261 (from zone_universe.json)
-**Grid:** 375,840 rows (261 zones × hourly, Jan–Feb 2024)
+**Entities:** 261 (from zone_universe.json)
+**Grid:** 570,024 rows (261 pickup zones × hourly)
 **Train:** [2024-01-01, 2024-02-01) | **Val:** [2024-02-01, 2024-02-15) | **Test:** [2024-02-15, 2024-03-01)
 **Features:** 9 (temporal + lag)
 
@@ -13,9 +12,9 @@
 
 | Model | MAE | RMSE | sMAPE | Latency (ms) |
 |-------|-----|------|-------|-------------|
-| slot_mean | 3.40 | 12.12 | 108.80% | 126.3 |
+| slot_mean | 3.40 | 12.12 | 108.80% | 116.0 |
 | seasonal_naive | 4.01 | 13.99 | 99.27% | 0.1 |
-| lightgbm | 2.90 | 9.37 | 138.61% | 660.2 |
+| lightgbm | 2.90 | 9.37 | 138.61% | 601.5 |
 | **vs Slot Mean** | -14.6% | — | — | — |
 | **vs Seasonal Naive** | -27.7% | — | — | — |
 
@@ -45,10 +44,10 @@
 | weekday | Monday–Friday (day_of_week < 5) | 68904 | 3.35 | 2.88 | -13.8% |
 | zero_demand | Hours with trip_count == 0 | 54962 | 0.21 | 0.28 | +31.3% |
 
-### Hardest Zones (by LightGBM MAE)
+### Hardest Pickup Zones (by LightGBM MAE)
 
-| Zone ID | Zone Name | MAE | Mean Demand |
-|---------|-----------|-----|-------------|
+| ID | Name | MAE | Mean Demand |
+|----|------|-----|-------------|
 | 132 | JFK Airport | 29.92 | 189.30 |
 | 161 | Midtown Center | 25.00 | 213.49 |
 | 186 | Penn Station/Madison Sq West | 24.34 | 146.38 |
@@ -63,6 +62,7 @@ train_end: 2024-02-01T00:00:00
 val_end: 2024-02-15T00:00:00
 test_end: 2024-03-01T00:00:00
 n_zones: 261
+lightgbm.objective: regression
 lightgbm.n_estimators: 500
 lightgbm.learning_rate: 0.05
 lightgbm.max_depth: 6
@@ -79,6 +79,6 @@ lightgbm.num_threads: -1
 
 | Model | Run ID |
 |-------|--------|
-| slot_mean | `7997bb8d84aa49e8b3ec3d8eea7266b8` |
-| seasonal_naive | `1f48329f7e064727a4127039048564a2` |
-| lightgbm | `c62157e3b31b4a8aba871529823a0850` |
+| slot_mean | `31cc9014bfc643729a3d5d72972de96d` |
+| seasonal_naive | `e5b91e7e67e349c9ad87ceb370b0d1ac` |
+| lightgbm | `eaeff1be5ec44b79a7c40afe0a7af19a` |

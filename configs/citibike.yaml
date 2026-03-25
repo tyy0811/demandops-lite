@@ -1,0 +1,61 @@
+dataset:
+  adapter: citibike
+
+data:
+  raw_dir: data/citibike/raw
+  processed_dir: data/citibike/processed
+  months: ["2024-01", "2024-02", "2024-03"]
+  warmup_months: ["2024-01"]
+  target_column: trip_count
+
+features:
+  lag_hours: [1, 24, 168]
+  rolling_windows: [24]
+  categorical: [zone_id]
+  numerical: [hour_of_day, day_of_week, is_weekend, month,
+              lag_1h, lag_24h, lag_168h, rolling_mean_24h]
+
+split:
+  train_start: "2024-02-01T00:00:00"
+  train_end: "2024-03-01T00:00:00"
+  val_end: "2024-03-16T00:00:00"
+  test_end: "2024-04-01T00:00:00"
+
+models:
+  slot_mean:
+    name: slot_mean
+  seasonal_naive:
+    name: seasonal_naive
+  lightgbm:
+    name: lightgbm
+    objective: regression
+    n_estimators: 500
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    early_stopping_rounds: 50
+    random_state: 42
+    num_threads: -1
+
+mlflow:
+  tracking_uri: "file:./mlruns"
+  experiment_name: "demandops-citibike"
+
+artifacts:
+  models_dir: artifacts/citibike/models
+  reports_dir: artifacts/citibike/reports
+  feature_schema_path: artifacts/citibike/models/feature_schema.json
+  zone_universe_path: artifacts/citibike/zone_universe.json
+
+serving:
+  host: "0.0.0.0"
+  port: 8002
+  model_name: lightgbm
+  history_path: data/citibike/processed/hourly_history.parquet
+  feature_path: data/citibike/processed/features.parquet
+  feature_schema_path: artifacts/citibike/models/feature_schema.json
+  zone_universe_path: artifacts/citibike/zone_universe.json
+  request_timeout_seconds: 10

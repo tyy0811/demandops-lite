@@ -2,32 +2,32 @@
 
 ![CI](https://github.com/tyy0811/demandops-lite/actions/workflows/ci.yaml/badge.svg)
 
-Same pipeline, two cities: NYC taxi (261 zones) + London bike-share (802 stations). LightGBM, FastAPI, Pandera contracts, Prometheus monitoring, 99 tests.
+Same pipeline, three datasets, two cities: NYC taxi (261 zones) + London bike-share (802 stations) + NYC bike-share (2,144 stations). LightGBM, FastAPI, Pandera contracts, Prometheus monitoring, 112 tests.
 
 End-to-end demand prediction pipeline with DatasetAdapter pattern — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
 
-> **99 tests | 2 datasets | 1,063 zones/stations | Prometheus `/metrics` | Docker ready**
+> **112 tests | 3 datasets | 3,207 zones/stations | Prometheus `/metrics` | Docker ready**
 
-## Dual-Dataset Benchmark
+## Triple-Dataset Benchmark
 
-Same pipeline, two datasets, two cities:
+Same pipeline, three datasets, two cities:
 
-| Metric | NYC Taxi | London Bike-Share |
-|--------|----------|-------------------|
-| Zones/Stations | 261 | 802 |
-| Grid rows | 375K | 1.75M |
-| Feature rows | 289K | 1.15M |
-| Slot Mean MAE | 3.40 | **0.75** |
-| LightGBM MAE | **2.90** | 0.77 |
-| LightGBM vs Slot Mean | -14.6% | +1.9% |
+| Metric | NYC Taxi | London Bike-Share | NYC Bike-Share |
+|--------|----------|-------------------|----------------|
+| Zones/Stations | 261 | 802 | 2,144 |
+| Grid rows | 375K | 1.75M | 4.68M |
+| Feature rows | 289K | 1.15M | 3.09M |
+| Slot Mean MAE | 3.40 | **0.75** | 1.03 |
+| LightGBM MAE | **2.90** | 0.77 | **0.95** |
+| LightGBM vs Slot Mean | -14.6% | +1.9% | -7.7% |
 
-LightGBM dominates on NYC taxi data (high-variance demand, 14.6% MAE reduction). On London bike-share, the simpler slot mean is competitive — low-variance station demand means the historical average is hard to beat on MAE, though LightGBM wins on RMSE (1.28 vs 1.31). Both datasets use identical feature engineering, model training, and evaluation code via the DatasetAdapter pattern.
+LightGBM dominates on NYC taxi data (high-variance demand, 14.6% MAE reduction) and NYC bike-share (7.7% improvement over slot mean across 2,144 stations). On London bike-share, the simpler slot mean is competitive — low-variance station demand means the historical average is hard to beat on MAE, though LightGBM wins on RMSE (1.28 vs 1.31). The Citibike result lands between the two: more stations and more variable demand than TfL, but less variance than taxi — LightGBM's advantage scales with demand heterogeneity. All three datasets use identical feature engineering, model training, and evaluation code via the DatasetAdapter pattern.
 
-Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md)
+Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md) | [`docs/benchmark_report_citibike.md`](docs/benchmark_report_citibike.md)
 
 ## What This Demonstrates
 
-- **Pipeline generality**: DatasetAdapter pattern — same code runs on NYC taxi and London bike-share
+- **Pipeline generality**: DatasetAdapter pattern — same code runs on NYC taxi, London bike-share, and NYC bike-share
 - **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines
 - **Data contracts**: Pandera validation at every pipeline boundary
 - **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking, objective experiments
@@ -41,7 +41,7 @@ Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/be
 
 | Feature | V1 | V2 | Signal |
 |---------|----|----|--------|
-| Datasets | NYC taxi only | + London bike-share (DatasetAdapter) | Pipeline generality |
+| Datasets | NYC taxi only | + London bike-share + NYC bike-share (DatasetAdapter) | Pipeline generality |
 | CI quality gate | Lint + tests | + MAE regression gate + Docker smoke test | ML-specific CI |
 | Batch inference | Single-record only | `/predict/batch` (up to 10K) | Production serving |
 | Objective selection | regression (implicit) | regression vs. Poisson (documented) | Scientific rigor |
@@ -86,7 +86,7 @@ Raw data → DatasetAdapter (download/aggregate/densify) → Polars (features) �
 ```
 
 **Data flow:**
-1. **Download** raw trip data via DatasetAdapter (NYC taxi parquets or TfL bike-share CSVs)
+1. **Download** raw trip data via DatasetAdapter (NYC taxi parquets, TfL bike-share CSVs, or Citibike zipped CSVs)
 2. **Prepare** dense entity×hour grid via DuckDB, engineer lag/temporal features with Polars
 3. **Validate** at every boundary with Pandera data contracts
 4. **Train** slot mean baseline, seasonal naive baseline, and LightGBM
@@ -117,14 +117,16 @@ Raw data → DatasetAdapter (download/aggregate/densify) → Polars (features) �
 demandops-lite/
 ├── configs/
 │   ├── default.yaml             # NYC taxi configuration
-│   └── tfl.yaml                 # London bike-share configuration
+│   ├── tfl.yaml                 # London bike-share configuration
+│   └── citibike.yaml            # NYC bike-share configuration
 ├── demandops/
 │   ├── features.py              # FEATURE_COLUMNS — single source of truth
 │   ├── data/
 │   │   ├── adapters/
 │   │   │   ├── base.py          # DatasetAdapter ABC
 │   │   │   ├── taxi.py          # NYC TLC Yellow Taxi adapter
-│   │   │   └── tfl.py           # TfL Santander Cycle Hire adapter
+│   │   │   ├── tfl.py           # TfL Santander Cycle Hire adapter
+│   │   │   └── citibike.py      # Citibike NYC adapter
 │   │   ├── download.py          # Adapter-delegated download
 │   │   ├── prepare.py           # Shared feature engineering pipeline
 │   │   ├── schemas.py           # Pandera data contracts
@@ -146,7 +148,7 @@ demandops-lite/
 │   └── monitoring/
 │       └── checks.py            # Sparse zone, extreme prediction checks
 ├── scripts/                     # CLI entrypoints (all accept --config)
-├── tests/                       # 99 tests
+├── tests/                       # 112 tests
 ├── docker/                      # Dockerfile + docker-compose
 ├── .github/workflows/ci.yaml   # GitHub Actions (test + Docker smoke test)
 └── Makefile                     # Pipeline targets
@@ -154,7 +156,7 @@ demandops-lite/
 
 ## Data Pipeline
 
-**Input:** Trip records via DatasetAdapter (NYC taxi parquets or TfL bike-share CSVs, Dec 2023 – Feb 2024)
+**Input:** Trip records via DatasetAdapter (NYC taxi parquets, TfL bike-share CSVs, or Citibike zipped CSVs)
 
 **Grid:** Dense entity×hour matrix. Every (zone_id, hour_ts) pair has exactly one row. Zero-demand hours are filled with trip_count=0. December provides warm-up for lag features.
 
@@ -185,7 +187,7 @@ demandops-lite/
 | **Seasonal Naive** | lag_168h (same hour, same day, one week ago) |
 | **LightGBM** | Gradient-boosted trees, predictions clipped to zero |
 
-Run `python scripts/benchmark.py --config configs/default.yaml` to generate the NYC benchmark report, or `--config configs/tfl.yaml` for London.
+Run `python scripts/benchmark.py --config configs/default.yaml` for NYC taxi, `--config configs/tfl.yaml` for London, or `--config configs/citibike.yaml` for NYC bike-share.
 
 ## API
 
@@ -270,7 +272,7 @@ docker-compose down
 ## Development
 
 ```bash
-make test       # Run 99 tests
+make test       # Run 112 tests
 make lint       # ruff check + format --check
 make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
@@ -278,8 +280,8 @@ make clean      # Remove generated data/artifacts
 
 ## Key Design Decisions
 
-See [DECISIONS.md](DECISIONS.md) for 20 documented rationales, including:
-- DatasetAdapter pattern for pipeline generality (NYC taxi + London bike-share)
+See [DECISIONS.md](DECISIONS.md) for 21 documented rationales, including:
+- DatasetAdapter pattern for pipeline generality (NYC taxi + London bike-share + NYC bike-share)
 - DuckDB for aggregation, Polars for feature engineering (not pandas)
 - Poisson vs regression objective (empirically tested, regression wins by 0.2%)
 - MAE regression gate in CI (frozen fixture + committed model)

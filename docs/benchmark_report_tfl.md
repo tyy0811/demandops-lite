@@ -2,7 +2,7 @@
 
 **Target:** Hourly trip count per docking station
 **Entities:** 802 (from zone_universe.json)
-**Grid:** 1,154,880 rows (802 docking stations × hourly)
+**Grid:** 1,751,568 rows (802 docking stations × hourly)
 **Train:** [2024-01-01, 2024-02-01) | **Val:** [2024-02-01, 2024-02-15) | **Test:** [2024-02-15, 2024-03-01)
 **Features:** 9 (temporal + lag)
 
@@ -12,9 +12,9 @@
 
 | Model | MAE | RMSE | sMAPE | Latency (ms) |
 |-------|-----|------|-------|-------------|
-| slot_mean | 0.75 | 1.31 | 124.31% | 364.1 |
+| slot_mean | 0.75 | 1.31 | 124.31% | 352.0 |
 | seasonal_naive | 0.89 | 1.63 | 124.46% | 0.3 |
-| lightgbm | 0.77 | 1.28 | 138.19% | 2139.9 |
+| lightgbm | 0.77 | 1.28 | 138.19% | 2427.9 |
 | **vs Slot Mean** | +2.0% | — | — | — |
 | **vs Seasonal Naive** | -13.7% | — | — | — |
 
@@ -79,6 +79,6 @@ lightgbm.num_threads: -1
 
 | Model | Run ID |
 |-------|--------|
-| slot_mean | `9546afd832db473ea3db80351ef5e736` |
-| seasonal_naive | `79bfb32e64c2470aa11dc25bf988ab5a` |
-| lightgbm | `6cdc9aeeb1a4464785e0aef1891f6ab5` |
+| slot_mean | `0963e7063d49478f9dbc38a8aa679e40` |
+| seasonal_naive | `8a48c18c62a54f41a74dea66e665ac0c` |
+| lightgbm | `ca5e5f5de82641178397eb9a4af0c6ba` |

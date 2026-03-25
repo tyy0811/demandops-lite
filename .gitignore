@@ -2,6 +2,7 @@
 data/raw/*.parquet
 data/processed/*.parquet
 data/tfl/
+data/citibike/
 
 # Artifacts (generated output — ignore all contents)
 artifacts/models/*
@@ -9,6 +10,7 @@ artifacts/models/*
 artifacts/zone_universe.json
 artifacts/reports/*
 artifacts/tfl/
+artifacts/citibike/
 
 # MLflow
 mlruns/

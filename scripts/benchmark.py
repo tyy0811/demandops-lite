@@ -45,11 +45,13 @@ def main() -> None:
 DATASET_LABELS: dict[str, str] = {
     "taxi": "NYC Taxi Demand Prediction",
     "tfl": "London Cycle Hire Demand Prediction",
+    "citibike": "NYC Bike-Share Demand Prediction",
 }
 
 ENTITY_LABELS: dict[str, str] = {
     "taxi": "pickup zone",
     "tfl": "docking station",
+    "citibike": "station",
 }
 
 
@@ -60,10 +62,11 @@ def _generate_markdown_report(report: dict, config: dict, trained: dict) -> None
     dataset_label = DATASET_LABELS.get(adapter_name, adapter_name)
     entity_label = ENTITY_LABELS.get(adapter_name, "zone")
 
-    # Compute grid size from features parquet
+    # Grid size = dense hourly history (pre-warmup), feature rows = post-warmup
+    history_path = Path(config["data"]["processed_dir"]) / "hourly_history.parquet"
     features_path = Path(config["data"]["processed_dir"]) / "features.parquet"
-    features_df = pl.read_parquet(features_path)
-    n_features_rows = len(features_df)
+    n_grid_rows = len(pl.read_parquet(history_path))
+    n_features_rows = len(pl.read_parquet(features_path))
 
     split_cfg = config["split"]
 
@@ -72,7 +75,7 @@ def _generate_markdown_report(report: dict, config: dict, trained: dict) -> None
         f"**Target:** Hourly trip count per {entity_label}",
         f"**Entities:** {zone_universe['n_zones']} (from zone_universe.json)",
         (
-            f"**Grid:** {n_features_rows:,} rows "
+            f"**Grid:** {n_grid_rows:,} rows "
             f"({zone_universe['n_zones']} {entity_label}s × hourly)"
         ),
         (

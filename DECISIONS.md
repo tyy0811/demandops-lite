@@ -175,3 +175,17 @@ TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemen
 **Result:** 802 TfL stations, 1.75M history rows, 1.15M feature rows. Slot mean MAE 0.75, LightGBM MAE 0.77. The simpler baseline is competitive on London bike-share because station-level demand has lower variance than NYC taxi zone demand — the historical average is hard to beat. LightGBM wins on RMSE (1.28 vs 1.31), consistent with its advantage on high-error outliers.
 
 **Alternative considered:** Citibike (NYC). Rejected — same city doesn't demonstrate geographic generality. Porto taxi dataset also considered but requires spatial binning of GPS trajectories, adding complexity that doesn't match the adapter pattern.
+
+## 21. Citibike Adapter: Decimal Station IDs and Cross-City Cycling Comparison
+
+**Decision:** Add NYC Citibike as a third dataset. Convert decimal station IDs (`"4028.03"`) to integers by normalizing to 2 decimal places and removing the dot (`4028.03` → `402803`). Drop the ~0.09% of rows with system IDs (`SYS016`, `JC009`) or null station IDs.
+
+**Why:** The original plan assumed ~2-3% of station IDs would be non-numeric (letter-prefixed). In practice, 99.9% of Citibike station IDs use a `NNNN.DD` decimal format — the decimal suffix distinguishes docks within a station cluster. Filtering to pure integers would have dropped all data. The multiply-and-remove-dot approach preserves all 2,144 stations, is deterministic and reversible (`zone_id / 100` recovers the original), and requires no schema changes.
+
+**Data source shift:** Dec 2023 data is only available as a 1.6GB full-year zip. Shifted to Jan–Mar 2024 where individual monthly zips exist (370–520MB each). The dense grid spans Jan 1 00:00 to Mar 31 23:00 (2,184 hours). January is the warm-up month for lag features.
+
+**Multi-CSV zips:** Months with >1M trips split data across multiple CSVs within the same zip (e.g., `202401-citibike-tripdata_1.csv`, `_2.csv`). The adapter extracts all CSVs and globs by month prefix.
+
+**Timestamp quirk:** Some rows use millisecond precision (`2024-01-04 18:24:07.758`). The adapter truncates the string to 19 characters before parsing, matching the TfL adapter's approach.
+
+**Result:** 2,144 stations, 6.67M trips (6,054 filtered), 4.68M dense grid rows, 3.09M feature rows. Slot Mean MAE 1.03, LightGBM MAE 0.95 (-7.7%). LightGBM wins on Citibike — unlike TfL where slot mean is competitive. This confirms that LightGBM's advantage scales with demand heterogeneity: NYC taxi (high variance, -14.6%) > NYC bike-share (medium variance, -7.7%) > London bike-share (low variance, +1.9%).
