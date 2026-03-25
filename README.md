@@ -1,20 +1,24 @@
 # demandops-lite
 
+LightGBM beats two honest baselines by 14.6–27.7% MAE on NYC taxi demand — served via FastAPI with train-serve feature parity, Pandera contracts, and Prometheus monitoring. 261 zones, 375K rows, 77 tests.
+
 End-to-end demand prediction pipeline for NYC taxi data — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
 
-Demonstrates ML engineering best practices on CPU: DuckDB for aggregation, Polars for feature engineering, LightGBM for prediction, FastAPI for serving, and Pandera for validation at every pipeline boundary.
+> **77 tests | 39 commits | 261 zones | 375K rows | Prometheus `/metrics` | Docker ready**
 
 ## Benchmark Results
 
 **261 zones | 375,840 rows | 9 features | Test: Feb 15–29, 2024**
 
-| Model | MAE | RMSE | sMAPE | vs Slot Mean |
-|-------|-----|------|-------|-------------|
-| Slot Mean | 3.40 | 12.12 | 108.8% | — |
-| Seasonal Naive | 4.01 | 13.99 | 99.3% | +18.1% |
-| **LightGBM** | **2.90** | **9.37** | 138.6% | **-14.6%** |
+| Model | MAE | RMSE | vs Slot Mean | vs Seasonal Naive |
+|-------|-----|------|-------------|-------------------|
+| **LightGBM** | **2.90** | **9.37** | **-14.6%** | **-27.7%** |
+| Slot Mean | 3.40 | 12.12 | — | — |
+| Seasonal Naive | 4.01 | 13.99 | +18.1% | — |
 
 LightGBM reduces MAE by 14.6% vs slot mean and 27.7% vs seasonal naive. 1.4% of predictions clipped to zero. Lag features (1h, 168h, 24h) dominate feature importance. Hardest zones: JFK Airport (MAE 29.9), Midtown Center (MAE 25.0).
+
+> **sMAPE note:** LightGBM's sMAPE (138.6%) exceeds both baselines (108.8%, 99.3%) because sMAPE heavily penalizes small absolute errors on near-zero actuals — a known artifact on zero-heavy distributions. MAE and RMSE are the appropriate metrics for this task. Full sMAPE breakdown in the benchmark report.
 
 Full report: [`docs/benchmark_report.md`](docs/benchmark_report.md)
 
@@ -61,6 +65,15 @@ NYC TLC Parquet → DuckDB (filter/aggregate/densify) → Polars (features) → 
 4. **Train** slot mean baseline, seasonal naive baseline, and LightGBM
 5. **Evaluate** on held-out test set with per-zone and edge-case analysis
 6. **Serve** via FastAPI with FeatureService reconstructing lags at request time
+
+## What This Demonstrates
+
+- **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines
+- **Data contracts**: Pandera validation at every pipeline boundary
+- **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking
+- **Train-serve parity**: FeatureService reconstructs identical lag features at inference time
+- **Monitoring**: Prometheus counters, latency histograms, prediction distribution
+- **Production patterns**: Docker, CI, structured logging, config-driven, graceful degradation
 
 ## Tech Stack
 
@@ -158,7 +171,23 @@ Run `make benchmark` after `make pipeline` to generate `docs/benchmark_report.md
 {"zone_id": 161, "hour_ts": "2024-02-20T14:00:00"}
 ```
 
-Returns predicted trip count with metadata (latency, features used, request ID).
+Response:
+
+```json
+{
+  "zone_id": 161,
+  "zone_name": "Midtown Center",
+  "hour_ts": "2024-02-20T14:00:00",
+  "predicted_count": 42.3,
+  "model_name": "lightgbm",
+  "metadata": {
+    "latency_ms": 12.4,
+    "request_id": "abc-123",
+    "features_used": {"lag_1h": 38.0, "lag_24h": 41.0, "lag_168h": 44.0},
+    "input_warnings": []
+  }
+}
+```
 
 **Rejection (422):** unsupported zone_id or hour_ts outside [2024-01-01, 2024-03-01).
 
@@ -191,6 +220,13 @@ make lint       # ruff check + format --check
 make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
 ```
+
+## V2 Roadmap
+
+- [ ] Weather features (OpenWeather history join)
+- [ ] Batch prediction endpoint
+- [ ] Second dataset (Citibike or energy demand) for pipeline generality
+- [ ] Poisson objective for native non-negative predictions
 
 ## Key Design Decisions
 
