@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: tlc
+    meta:
+      external_location: "../data/raw/yellow_tripdata_*.parquet"
+    tables:
+      - name: yellow_tripdata
+        description: "Raw NYC TLC Yellow Taxi trip records (Dec 2023 - Feb 2024)"
