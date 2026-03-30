@@ -10,7 +10,7 @@ End-to-end demand prediction pipeline with DatasetAdapter pattern — from data 
 
 ## Triple-Dataset Benchmark
 
-Same pipeline, three datasets, two cities:
+**Production-grade ML pipeline serving 3 datasets across 2 cities and 3,207 zones/stations, with 28 dbt tests, 112 Python tests, CI quality gates, and a MAE regression gate — same code, same features, same model for every dataset.**
 
 | Metric | NYC Taxi | London Bike-Share | NYC Bike-Share |
 |--------|----------|-------------------|----------------|
@@ -21,14 +21,14 @@ Same pipeline, three datasets, two cities:
 | LightGBM MAE | **2.90** | 0.77 | **0.95** |
 | LightGBM vs Slot Mean | -14.6% | +1.9% | -7.7% |
 
-LightGBM dominates on NYC taxi data (high-variance demand, 14.6% MAE reduction) and NYC bike-share (7.7% improvement over slot mean across 2,144 stations). On London bike-share, the simpler slot mean is competitive — low-variance station demand means the historical average is hard to beat on MAE, though LightGBM wins on RMSE (1.28 vs 1.31). The Citibike result lands between the two: more stations and more variable demand than TfL, but less variance than taxi — LightGBM's advantage scales with demand heterogeneity. All three datasets use identical feature engineering, model training, and evaluation code via the DatasetAdapter pattern.
+LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.6% MAE), while low-variance bike stations are well-served by a simple historical mean (+1.9%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 23 documented design rationales.
 
 Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md) | [`docs/benchmark_report_citibike.md`](docs/benchmark_report_citibike.md)
 
-## What This Demonstrates
+## Engineering Scope
 
-- **Pipeline generality**: DatasetAdapter pattern — same code runs on NYC taxi, London bike-share, and NYC bike-share
-- **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines
+- **Pipeline generality**: DatasetAdapter pattern — same code path for NYC taxi, London bike-share, and NYC bike-share
+- **Data engineering**: DuckDB SQL aggregation, dense grid construction, Polars feature pipelines, dbt analytics layer
 - **Data contracts**: Pandera validation at every pipeline boundary
 - **ML lifecycle**: Temporal split (half-open), two honest baselines, MLflow tracking, objective experiments
 - **Train-serve parity**: FeatureService reconstructs identical lag features at inference time
@@ -57,6 +57,9 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
+# 1b. (Optional) Install dbt analytics layer
+pip install -e ".[dbt]"
+
 # 2. Run full pipeline (download → prepare → train → evaluate → benchmark)
 make pipeline
 
@@ -77,12 +80,24 @@ curl http://localhost:8001/metrics
 
 ## Architecture
 
-```
-Raw data → DatasetAdapter (download/aggregate/densify) → Polars (features) → LightGBM (predict)
-                                                                                  ↓
-                                                                             FastAPI /predict
-                                                                                  ↑
-                                                                 FeatureService (lag reconstruction)
+```mermaid
+flowchart LR
+    subgraph Ingest
+        A[Raw Data<br/>Parquet / CSV / Zip] --> B[DatasetAdapter<br/>download + filter]
+    end
+    subgraph Transform
+        B --> C[DuckDB<br/>aggregate + densify]
+        C --> D[Polars<br/>lag & temporal features]
+        C -.->|parallel| E[dbt<br/>staging → mart]
+    end
+    subgraph ML
+        D --> F[LightGBM<br/>train + evaluate]
+        D --> G[Pandera<br/>data contracts]
+    end
+    subgraph Serve
+        F --> H[FastAPI<br/>/predict  /predict/batch]
+        H --> I[Prometheus<br/>/metrics]
+    end
 ```
 
 **Data flow:**
@@ -269,6 +284,25 @@ curl http://localhost:8001/health
 docker-compose down
 ```
 
+## Analytics Engineering (dbt)
+
+The SQL transformation logic (filter → aggregate → densify) is also expressed
+as a dbt project using dbt-duckdb. This provides:
+
+- **Versioned SQL models** with staging → intermediate → mart lineage
+- **Schema tests** (not_null, unique composite keys, accepted_values, no hour gaps)
+- **Auto-generated documentation** (`dbt docs generate`)
+
+The dbt layer produces the same dense zone×hour grid as `prepare.py` —
+verified by parity checks on row count, trip_count, avg_fare, avg_distance,
+and temporal features. **dbt handles SQL-natural transforms (filter, aggregate, densify, temporal features); Polars handles ML-specific features (lag, rolling mean) where `shift()` on sorted groups is more natural than SQL window functions.** This boundary is a deliberate design choice — see [DECISIONS.md #23](DECISIONS.md).
+
+```bash
+make dbt-install
+make dbt-all        # run + test (28 tests)
+make dbt-docs       # browse at http://localhost:8080
+```
+
 ## Development
 
 ```bash
@@ -280,11 +314,9 @@ make clean      # Remove generated data/artifacts
 
 ## Key Design Decisions
 
-See [DECISIONS.md](DECISIONS.md) for 21 documented rationales, including:
-- DatasetAdapter pattern for pipeline generality (NYC taxi + London bike-share + NYC bike-share)
-- DuckDB for aggregation, Polars for feature engineering (not pandas)
-- Poisson vs regression objective (empirically tested, regression wins by 0.2%)
-- MAE regression gate in CI (frozen fixture + committed model)
-- Batch endpoint design (all-or-nothing validation, independent from /predict)
-- Dense grid with December warm-up, half-open temporal splits
-- Graceful degradation, Pandera at every boundary, Prometheus monitoring
+Every non-obvious choice is documented in [DECISIONS.md](DECISIONS.md) — 23 entries covering architecture, data engineering, ML methodology, and serving trade-offs. Highlights:
+
+- Why DuckDB for aggregation and Polars for features (not pandas) — #1, #2
+- Why the model barely beats slot mean on London data (and why that's informative) — #21
+- Why dbt runs alongside the Python pipeline, not replacing it — #22
+- Where dbt stops and Polars starts, and why — #23

@@ -1,0 +1,8 @@
+demandops_duckdb:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/demandops.duckdb
+      extensions:
+        - parquet

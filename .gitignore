@@ -43,3 +43,13 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 data/zones.csv
+
+# dbt
+data/demandops.duckdb
+dbt_demandops/target/
+dbt_demandops/dbt_packages/
+dbt_demandops/logs/
+dbt_demandops/.user.yml
+
+# Worktrees
+.worktrees/

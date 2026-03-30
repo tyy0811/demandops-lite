@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: mart_training_features
+    description: >
+      Training-ready feature base. Dense grid with temporal columns.
+      Downstream Polars adds lag_1h, lag_24h, lag_168h, rolling_mean_24h.
+      day_of_week uses 0=Mon convention (see DECISIONS.md #4).
+    columns:
+      - name: zone_id
+        tests: [not_null]
+      - name: hour_ts
+        tests: [not_null]
+      - name: trip_count
+        tests: [not_null]
+      - name: hour_of_day
+        description: "0-23"
+        tests: [not_null]
+      - name: day_of_week
+        description: "0=Mon, 6=Sun (Python convention, not DuckDB 0=Sun)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2, 3, 4, 5, 6]
+      - name: is_weekend
+        description: "1 if Sat or Sun, 0 otherwise"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: month
+        description: "12 (Dec), 1 (Jan), 2 (Feb)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [12, 1, 2]
+    tests:
+      - unique:
+          column_name: "zone_id || '-' || hour_ts"
