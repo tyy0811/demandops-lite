@@ -43,17 +43,17 @@ clean:
 pipeline: download prepare train evaluate benchmark
 
 ## dbt targets
-dbt-install:	## Install dbt-duckdb
-	pip install dbt-duckdb
+dbt-install:	## Install dbt-duckdb via repo extras
+	.venv/bin/pip install -e ".[dbt]"
 
 dbt-run:	## Run dbt transformations
-	cd dbt_demandops && dbt run
+	cd dbt_demandops && ../.venv/bin/dbt run
 
 dbt-test:	## Run dbt schema and custom tests
-	cd dbt_demandops && dbt test
+	cd dbt_demandops && ../.venv/bin/dbt test
 
 dbt-docs:	## Generate and serve dbt documentation
-	cd dbt_demandops && dbt docs generate && dbt docs serve
+	cd dbt_demandops && ../.venv/bin/dbt docs generate && ../.venv/bin/dbt docs serve
 
 dbt-clean:	## Remove dbt build artifacts
 	rm -f data/demandops.duckdb
