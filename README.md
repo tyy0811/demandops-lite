@@ -57,6 +57,9 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
+# 1b. (Optional) Install dbt analytics layer
+pip install -e ".[dbt]"
+
 # 2. Run full pipeline (download → prepare → train → evaluate → benchmark)
 make pipeline
 
