@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: stg_trips_raw
+    description: >
+      Filtered TLC Yellow Taxi trips. Mirrors the WHERE clause in
+      demandops/data/adapters/taxi.py. Rejects nulls, out-of-range zones,
+      negative amounts/distances, and trips outside Dec 2023 - Feb 2024.
+    columns:
+      - name: zone_id
+        description: "TLC pickup location ID (1-263)"
+        tests:
+          - not_null
+      - name: hour_ts
+        description: "Hour-truncated pickup timestamp"
+        tests:
+          - not_null
+      - name: total_amount
+        description: "Trip total amount (non-negative)"
+        tests:
+          - not_null
+      - name: trip_distance
+        description: "Trip distance in miles (non-negative)"
+        tests:
+          - not_null
