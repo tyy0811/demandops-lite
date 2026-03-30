@@ -43,3 +43,6 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 data/zones.csv
+
+# Worktrees
+.worktrees/
