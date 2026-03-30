@@ -21,19 +21,22 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5, 6]
+              arguments:
+                values: [0, 1, 2, 3, 4, 5, 6]
       - name: is_weekend
         description: "1 if Sat or Sun, 0 otherwise"
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1]
+              arguments:
+                values: [0, 1]
       - name: month
         description: "12 (Dec), 1 (Jan), 2 (Feb)"
         tests:
           - not_null
           - accepted_values:
-              values: [12, 1, 2]
+              arguments:
+                values: [12, 1, 2]
     tests:
       - unique:
           column_name: "zone_id || '-' || hour_ts"
