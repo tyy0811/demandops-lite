@@ -44,5 +44,11 @@ Thumbs.db
 .ipynb_checkpoints/
 data/zones.csv
 
+# dbt
+data/demandops.duckdb
+dbt_demandops/target/
+dbt_demandops/dbt_packages/
+dbt_demandops/logs/
+
 # Worktrees
 .worktrees/

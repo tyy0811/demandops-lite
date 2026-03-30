@@ -1,4 +1,4 @@
-.PHONY: download prepare train evaluate benchmark serve test lint clean pipeline
+.PHONY: download prepare train evaluate benchmark serve test lint clean pipeline dbt-install dbt-run dbt-test dbt-docs dbt-clean dbt-all
 
 download:
 	.venv/bin/python scripts/download_data.py
@@ -41,3 +41,22 @@ clean:
 	rm -rf __pycache__ .pytest_cache
 
 pipeline: download prepare train evaluate benchmark
+
+## dbt targets
+dbt-install:	## Install dbt-duckdb
+	pip install dbt-duckdb
+
+dbt-run:	## Run dbt transformations
+	cd dbt_demandops && dbt run
+
+dbt-test:	## Run dbt schema and custom tests
+	cd dbt_demandops && dbt test
+
+dbt-docs:	## Generate and serve dbt documentation
+	cd dbt_demandops && dbt docs generate && dbt docs serve
+
+dbt-clean:	## Remove dbt build artifacts
+	rm -f data/demandops.duckdb
+	rm -rf dbt_demandops/target dbt_demandops/dbt_packages dbt_demandops/logs
+
+dbt-all: dbt-run dbt-test	## Run + test

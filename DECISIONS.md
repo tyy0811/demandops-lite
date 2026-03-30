@@ -189,3 +189,17 @@ TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemen
 **Timestamp quirk:** Some rows use millisecond precision (`2024-01-04 18:24:07.758`). The adapter truncates the string to 19 characters before parsing, matching the TfL adapter's approach.
 
 **Result:** 2,144 stations, 6.67M trips (6,054 filtered), 4.68M dense grid rows, 3.09M feature rows. Slot Mean MAE 1.03, LightGBM MAE 0.95 (-7.7%). LightGBM wins on Citibike — unlike TfL where slot mean is competitive. This confirms that LightGBM's advantage scales with demand heterogeneity: NYC taxi (high variance, -14.6%) > NYC bike-share (medium variance, -7.7%) > London bike-share (low variance, +1.9%).
+
+## 22. dbt Layer Alongside Python Pipeline (Option B)
+
+**Decision:** Add a dbt transformation layer that runs in parallel with the Python pipeline, not replacing it. The dbt mart produces the same dense zone×hour grid as `prepare.py`, verified by parity checks.
+
+**Why:** The Python pipeline is tightly integrated with Pandera validation, Polars feature engineering, and the DatasetAdapter pattern for multi-dataset support. Replacing it with dbt would require re-implementing Pandera-equivalent tests and the adapter abstraction. Instead, dbt runs in parallel, proving the same SQL transformations are expressible in analytics engineering tooling. This mirrors real-world hybrid architectures where dbt handles warehouse transformations and Python handles ML-specific feature engineering.
+
+**Alternative considered:** Option A (dbt replaces prepare.py SQL). Rejected because it would break the existing 112-test suite and require rearchitecting the adapter pattern.
+
+## 23. dbt Stops at Temporal Features, Not Lag Features
+
+**Decision:** The dbt mart includes temporal features (hour_of_day, day_of_week, is_weekend, month) but not lag or rolling features (lag_1h, lag_24h, lag_168h, rolling_mean_24h). Those are computed downstream in Polars.
+
+**Why:** Lag features require ordered window functions partitioned by zone_id over 2,184 hours × 261 zones. While DuckDB supports this in SQL, Polars expresses it more concisely and efficiently via `shift()` on sorted groups. The boundary — dbt for SQL-natural transforms, Polars for ML-specific features — is a deliberate architectural decision, not a limitation.

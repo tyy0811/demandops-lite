@@ -272,6 +272,25 @@ curl http://localhost:8001/health
 docker-compose down
 ```
 
+## Analytics Engineering (dbt)
+
+The SQL transformation logic (filter → aggregate → densify) is also expressed
+as a dbt project using dbt-duckdb. This provides:
+
+- **Versioned SQL models** with staging → intermediate → mart lineage
+- **Schema tests** (not_null, unique composite keys, accepted_values, no hour gaps)
+- **Auto-generated documentation** (`dbt docs generate`)
+
+The dbt layer produces the same dense zone×hour grid as `prepare.py` —
+verified by parity checks on row count, trip_count, avg_fare, avg_distance,
+and temporal features. Lag and rolling features are computed downstream in Polars.
+
+```bash
+make dbt-install
+make dbt-all        # run + test (28 tests)
+make dbt-docs       # browse at http://localhost:8080
+```
+
 ## Development
 
 ```bash
@@ -283,7 +302,7 @@ make clean      # Remove generated data/artifacts
 
 ## Key Design Decisions
 
-See [DECISIONS.md](DECISIONS.md) for 21 documented rationales, including:
+See [DECISIONS.md](DECISIONS.md) for 23 documented rationales, including:
 - DatasetAdapter pattern for pipeline generality (NYC taxi + London bike-share + NYC bike-share)
 - DuckDB for aggregation, Polars for feature engineering (not pandas)
 - Poisson vs regression objective (empirically tested, regression wins by 0.2%)
