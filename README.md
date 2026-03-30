@@ -10,7 +10,7 @@ End-to-end demand prediction pipeline with DatasetAdapter pattern — from data 
 
 ## Triple-Dataset Benchmark
 
-Same pipeline, three datasets, two cities:
+**Production-grade ML pipeline serving 3 datasets across 2 cities and 3,207 zones/stations, with 28 dbt tests, 112 Python tests, CI quality gates, and a MAE regression gate — same code, same features, same model for every dataset.**
 
 | Metric | NYC Taxi | London Bike-Share | NYC Bike-Share |
 |--------|----------|-------------------|----------------|
@@ -80,12 +80,24 @@ curl http://localhost:8001/metrics
 
 ## Architecture
 
-```
-Raw data → DatasetAdapter (download/aggregate/densify) → Polars (features) → LightGBM (predict)
-                                                                                  ↓
-                                                                             FastAPI /predict
-                                                                                  ↑
-                                                                 FeatureService (lag reconstruction)
+```mermaid
+flowchart LR
+    subgraph Ingest
+        A[Raw Data<br/>Parquet / CSV / Zip] --> B[DatasetAdapter<br/>download + filter]
+    end
+    subgraph Transform
+        B --> C[DuckDB<br/>aggregate + densify]
+        C --> D[Polars<br/>lag & temporal features]
+        C -.->|parallel| E[dbt<br/>staging → mart]
+    end
+    subgraph ML
+        D --> F[LightGBM<br/>train + evaluate]
+        D --> G[Pandera<br/>data contracts]
+    end
+    subgraph Serve
+        F --> H[FastAPI<br/>/predict  /predict/batch]
+        H --> I[Prometheus<br/>/metrics]
+    end
 ```
 
 **Data flow:**
