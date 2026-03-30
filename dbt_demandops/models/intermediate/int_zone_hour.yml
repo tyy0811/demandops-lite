@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: int_zone_hour_agg
+    description: "Trips aggregated to zone x hour grain with averages."
+    columns:
+      - name: zone_id
+        tests: [not_null]
+      - name: hour_ts
+        tests: [not_null]
+      - name: trip_count
+        tests: [not_null]
+    tests:
+      - unique:
+          column_name: "zone_id || '-' || hour_ts"
+
+  - name: int_zone_hour_dense
+    description: >
+      Dense zone x hour grid. Every (zone_id, hour_ts) pair has exactly
+      one row. Missing slots filled with trip_count=0, null avg_fare/avg_distance.
+    columns:
+      - name: zone_id
+        description: "TLC pickup location ID (1-263)"
+        tests: [not_null]
+      - name: hour_ts
+        description: "Hour-truncated timestamp"
+        tests: [not_null]
+      - name: trip_count
+        description: "Number of trips. 0 for slots with no observed trips."
+        tests: [not_null]
+    tests:
+      - unique:
+          column_name: "zone_id || '-' || hour_ts"
