@@ -51,5 +51,8 @@ dbt_demandops/dbt_packages/
 dbt_demandops/logs/
 dbt_demandops/.user.yml
 
+# Plans (local working docs)
+docs/plans/
+
 # Worktrees
 .worktrees/
