@@ -371,9 +371,11 @@ make clean      # Remove generated data/artifacts
 
 ## Key Design Decisions
 
-Every non-obvious choice is documented in [DECISIONS.md](DECISIONS.md) — 23 entries covering architecture, data engineering, ML methodology, and serving trade-offs. Highlights:
+Every non-obvious choice is documented in [DECISIONS.md](DECISIONS.md) — 35 entries covering architecture, data engineering, ML methodology, serving, monitoring, and security trade-offs. Highlights:
 
 - Why DuckDB for aggregation and Polars for features (not pandas) — #1, #2
 - Why the model barely beats slot mean on London data (and why that's informative) — #21
 - Why dbt runs alongside the Python pipeline, not replacing it — #22
-- Where dbt stops and Polars starts, and why — #23
+- Why PSI + KS + correlation matrix, not autoencoder — #24
+- Why on-demand drift computation, not continuous — #30
+- Why per-route `Depends(requires_auth)`, not global middleware — #34
