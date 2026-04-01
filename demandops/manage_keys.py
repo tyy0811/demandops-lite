@@ -23,7 +23,23 @@ def create_key(
     rate_limit: int = 100,
     max_batch_size: int = 10000,
 ) -> str:
-    """Create a new API key. Returns the raw key (shown only once)."""
+    """Create a new API key. Returns the raw key (shown only once).
+
+    If a key already exists for this client, the old key is revoked first
+    (one active key per client). Raises ValueError for non-positive limits.
+    """
+    if rate_limit <= 0:
+        raise ValueError(f"rate_limit must be positive, got {rate_limit}")
+    if max_batch_size <= 0:
+        raise ValueError(f"max_batch_size must be positive, got {max_batch_size}")
+
+    # Revoke any existing key for this client (rotation)
+    existing = db.execute(
+        "SELECT key_hash FROM api_keys WHERE client_name = ?", (client_name,)
+    ).fetchone()
+    if existing:
+        db.execute("DELETE FROM api_keys WHERE client_name = ?", (client_name,))
+
     raw_key = secrets.token_urlsafe(32)
     key_hash = hash_key(raw_key)
     db.execute(

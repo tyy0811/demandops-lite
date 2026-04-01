@@ -110,6 +110,14 @@ class TestRequiresAuth:
         )
         assert resp.status_code == 401
 
+    def test_lowercase_bearer_accepted(self, auth_client, active_client) -> None:
+        """RFC 7235: auth scheme is case-insensitive."""
+        resp = auth_client.get(
+            "/protected",
+            headers={"Authorization": f"bearer {active_client['raw_key']}"},
+        )
+        assert resp.status_code == 200
+
     def test_same_error_message_for_invalid_and_revoked(
         self, auth_client, auth_db, active_client
     ) -> None:

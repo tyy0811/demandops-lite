@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
+
+import pytest
 
 from demandops.db import get_db
 
@@ -34,6 +37,29 @@ class TestGetDb:
         db_path = tmp_path / "subdir" / "test.db"
         conn = get_db(str(db_path))
         assert db_path.exists()
+        conn.close()
+
+    def test_duplicate_client_name_rejected(self, tmp_path: Path) -> None:
+        conn = get_db(str(tmp_path / "test.db"))
+        conn.execute(
+            "INSERT INTO api_keys (key_hash, client_name, created_at) "
+            "VALUES ('hash1', 'team_a', '2024-01-01')"
+        )
+        conn.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO api_keys (key_hash, client_name, created_at) "
+                "VALUES ('hash2', 'team_a', '2024-01-01')"
+            )
+        conn.close()
+
+    def test_non_positive_rate_limit_rejected(self, tmp_path: Path) -> None:
+        conn = get_db(str(tmp_path / "test.db"))
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO api_keys (key_hash, client_name, created_at, rate_limit) "
+                "VALUES ('hash1', 'team_a', '2024-01-01', 0)"
+            )
         conn.close()
 
     def test_idempotent_on_existing_db(self, tmp_path: Path) -> None:

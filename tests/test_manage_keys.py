@@ -45,6 +45,33 @@ class TestCreateKey:
         ).fetchone()
         assert row[0] == 50
 
+    def test_rotation_replaces_old_key(self, cli_db) -> None:
+        old_key = create_key(cli_db, client_name="team_a", rate_limit=100)
+        new_key = create_key(cli_db, client_name="team_a", rate_limit=100)
+        assert old_key != new_key
+        # Only one row for team_a
+        count = cli_db.execute(
+            "SELECT COUNT(*) FROM api_keys WHERE client_name = ?", ("team_a",)
+        ).fetchone()[0]
+        assert count == 1
+        # New key hash is stored
+        row = cli_db.execute(
+            "SELECT key_hash FROM api_keys WHERE client_name = ?", ("team_a",)
+        ).fetchone()
+        assert row[0] == hash_key(new_key)
+
+    def test_zero_rate_limit_rejected(self, cli_db) -> None:
+        with pytest.raises(ValueError, match="rate_limit must be positive"):
+            create_key(cli_db, client_name="team_a", rate_limit=0)
+
+    def test_negative_rate_limit_rejected(self, cli_db) -> None:
+        with pytest.raises(ValueError, match="rate_limit must be positive"):
+            create_key(cli_db, client_name="team_a", rate_limit=-5)
+
+    def test_zero_max_batch_size_rejected(self, cli_db) -> None:
+        with pytest.raises(ValueError, match="max_batch_size must be positive"):
+            create_key(cli_db, client_name="team_a", rate_limit=100, max_batch_size=0)
+
 
 class TestListKeys:
     def test_lists_created_keys(self, cli_db) -> None:

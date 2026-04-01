@@ -42,10 +42,10 @@ async def requires_auth(request: Request) -> dict:
     Raises 401 for invalid/inactive keys, 429 for rate limit exceeded.
     """
     auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
+    if not auth_header.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Invalid or inactive API key")
 
-    raw_key = auth_header[7:]
+    raw_key = auth_header[7:]  # len("bearer ") == len("Bearer ") == 7
     key_hash = hash_key(raw_key)
 
     db = request.app.state.db

@@ -20,10 +20,10 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS api_keys (
             key_hash        TEXT PRIMARY KEY,
-            client_name     TEXT NOT NULL,
+            client_name     TEXT NOT NULL UNIQUE,
             created_at      TEXT NOT NULL,
-            rate_limit      INTEGER NOT NULL DEFAULT 100,
-            max_batch_size  INTEGER NOT NULL DEFAULT 10000,
+            rate_limit      INTEGER NOT NULL DEFAULT 100 CHECK(rate_limit > 0),
+            max_batch_size  INTEGER NOT NULL DEFAULT 10000 CHECK(max_batch_size > 0),
             is_active       BOOLEAN NOT NULL DEFAULT 1
         )
     """)
