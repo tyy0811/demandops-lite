@@ -9,7 +9,9 @@ import structlog
 import yaml
 from fastapi import FastAPI
 
+from demandops.db import get_db
 from demandops.models.registry import create_model
+from demandops.security.auth import RateLimiter
 from demandops.serving.feature_service import FeatureService
 from demandops.serving.middleware import RequestLoggingMiddleware
 from demandops.serving.routes import configure, router
@@ -36,6 +38,12 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         feature_service = None
         model = None
         model_artifact_loaded = False
+
+        # Initialize shared database and rate limiter
+        db_path = config.get("db", {}).get("path", "data/demandops.db")
+        db = get_db(db_path)
+        app.state.db = db
+        app.state.rate_limiter = RateLimiter()
 
         # Load feature service — graceful degradation on missing artifacts
         try:

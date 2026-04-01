@@ -116,14 +116,17 @@ class TestMetricsEndpoint:
 
 class TestDegradedHealth:
     @pytest.fixture
-    def degraded_client_no_model(self, mock_feature_service):
+    def degraded_client_no_model(self, mock_feature_service, test_db, api_key):
         """App with feature service but no model artifact loaded."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+        from demandops.security.auth import RateLimiter
         from demandops.serving.routes import configure, router
 
         app = FastAPI()
         app.include_router(router)
+        app.state.db = test_db
+        app.state.rate_limiter = RateLimiter()
         configure(
             app,
             mock_feature_service,
@@ -134,17 +137,22 @@ class TestDegradedHealth:
             model_objective="regression",
             model_version="lightgbm-regression",
         )
-        return TestClient(app)
+        client = TestClient(app)
+        client.headers["Authorization"] = f"Bearer {api_key}"
+        return client
 
     @pytest.fixture
-    def degraded_client_no_services(self):
+    def degraded_client_no_services(self, test_db, api_key):
         """App with neither feature service nor model."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+        from demandops.security.auth import RateLimiter
         from demandops.serving.routes import configure, router
 
         app = FastAPI()
         app.include_router(router)
+        app.state.db = test_db
+        app.state.rate_limiter = RateLimiter()
         configure(
             app,
             None,
@@ -155,7 +163,9 @@ class TestDegradedHealth:
             model_objective="regression",
             model_version="lightgbm-regression",
         )
-        return TestClient(app)
+        client = TestClient(app)
+        client.headers["Authorization"] = f"Bearer {api_key}"
+        return client
 
     def test_missing_model_reports_degraded(self, degraded_client_no_model) -> None:
         resp = degraded_client_no_model.get("/health")
@@ -300,3 +310,61 @@ class TestBatchPredictEndpoint:
             json={"requests": [{"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"}] * 10_001},
         )
         assert resp.status_code == 422
+
+
+class TestAuthOnPredictionEndpoints:
+    def test_predict_without_auth_returns_401(self, test_app) -> None:
+        from fastapi.testclient import TestClient
+
+        client = TestClient(test_app)  # No auth header
+        resp = client.post(
+            "/predict",
+            json={"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+        )
+        assert resp.status_code == 401
+
+    def test_batch_without_auth_returns_401(self, test_app) -> None:
+        from fastapi.testclient import TestClient
+
+        client = TestClient(test_app)
+        resp = client.post(
+            "/predict/batch",
+            json={"requests": [{"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"}]},
+        )
+        assert resp.status_code == 401
+
+    def test_health_without_auth_returns_200(self, test_app) -> None:
+        from fastapi.testclient import TestClient
+
+        client = TestClient(test_app)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
+    def test_predict_response_includes_prediction_id(self, test_client) -> None:
+        resp = test_client.post(
+            "/predict",
+            json={"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+        )
+        assert resp.status_code == 200
+        assert "prediction_id" in resp.json()
+
+    def test_batch_size_enforcement(self, test_app, test_db) -> None:
+        from fastapi.testclient import TestClient
+        from demandops.security.auth import hash_key
+
+        # Create a key with max_batch_size=5
+        raw_key = "limited-batch-key-1234567890"
+        test_db.execute(
+            "INSERT INTO api_keys (key_hash, client_name, created_at, rate_limit, max_batch_size, is_active) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (hash_key(raw_key), "batch_limited", "2024-01-01", 1000, 5, True),
+        )
+        test_db.commit()
+
+        client = TestClient(test_app)
+        client.headers["Authorization"] = f"Bearer {raw_key}"
+        resp = client.post(
+            "/predict/batch",
+            json={"requests": [{"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"}] * 6},
+        )
+        assert resp.status_code == 413

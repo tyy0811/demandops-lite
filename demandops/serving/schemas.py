@@ -22,6 +22,7 @@ class PredictionMetadata(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    prediction_id: str
     zone_id: int
     zone_name: str
     hour_ts: datetime
@@ -60,3 +61,20 @@ class BatchPredictResponse(BaseModel):
     predictions: list[PredictResponse]
     prediction_count: int
     latency_ms: float
+
+
+class ActualSubmission(BaseModel):
+    prediction_id: str | None = None
+    zone_id: int | None = None
+    hour_ts: datetime | None = None
+    actual_value: float
+
+
+class ActualsRequest(BaseModel):
+    actuals: list[ActualSubmission] = Field(min_length=1)
+
+
+class ActualsResponse(BaseModel):
+    matched_count: int
+    unmatched_count: int
+    warnings: list[str] = Field(default_factory=list)

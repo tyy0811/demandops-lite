@@ -7,7 +7,7 @@ import uuid
 
 import numpy as np
 import structlog
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from prometheus_client import generate_latest
 from starlette.responses import Response
 
@@ -21,6 +21,7 @@ from demandops.serving.metrics import (
     REQUEST_COUNT,
     REQUEST_LATENCY,
 )
+from demandops.security.auth import requires_auth
 from demandops.serving.schemas import (
     BatchPredictRequest,
     BatchPredictResponse,
@@ -56,8 +57,9 @@ def configure(
 
 
 @router.post("/predict", response_model=PredictResponse)
-async def predict(body: PredictRequest, request: Request):
+async def predict(body: PredictRequest, request: Request, client: dict = Depends(requires_auth)):
     request_id = str(uuid.uuid4())
+    prediction_id = str(uuid.uuid4())
     start = time.perf_counter()
     svc = request.app.state.feature_service
     model = request.app.state.model
@@ -106,6 +108,7 @@ async def predict(body: PredictRequest, request: Request):
         )
 
         return PredictResponse(
+            prediction_id=prediction_id,
             zone_id=body.zone_id,
             zone_name=svc.get_zone_name(body.zone_id),
             hour_ts=body.hour_ts,
@@ -131,12 +134,21 @@ async def predict(body: PredictRequest, request: Request):
 
 
 @router.post("/predict/batch", response_model=BatchPredictResponse)
-async def predict_batch(body: BatchPredictRequest, request: Request):
+async def predict_batch(
+    body: BatchPredictRequest, request: Request, client: dict = Depends(requires_auth)
+):
     start = time.perf_counter()
     svc = request.app.state.feature_service
     model = request.app.state.model
     model_name = request.app.state.model_name
     model_version = request.app.state.model_version
+
+    # Per-key batch size enforcement
+    if len(body.requests) > client["max_batch_size"]:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Batch size {len(body.requests)} exceeds limit {client['max_batch_size']}",
+        )
 
     try:
         # Phase 1: Collect features for all requests (all-or-nothing validation)
@@ -184,6 +196,7 @@ async def predict_batch(body: BatchPredictRequest, request: Request):
             PREDICTION_VALUE.observe(predicted_count)
             predictions.append(
                 PredictResponse(
+                    prediction_id=str(uuid.uuid4()),
                     zone_id=req.zone_id,
                     zone_name=zone_names[i],
                     hour_ts=req.hour_ts,
