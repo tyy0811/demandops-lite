@@ -130,8 +130,9 @@ class TestCorrelationShift:
         # All features strongly correlated — creates a near-1 correlation matrix
         samples = np.hstack([base + rng.randn(n, 1) * 0.1 for _ in range(n_cont)])
 
-        shift = compute_correlation_shift(ref_corr, samples)
+        shift, n_excluded = compute_correlation_shift(ref_corr, samples)
         assert shift > 0.01, f"Expected correlation shift > 0.01, got {shift}"
+        assert n_excluded == 0
 
     def test_low_shift_on_matching_data(self, reference_distributions) -> None:
         from demandops.monitoring.drift_detector import compute_correlation_shift
@@ -147,8 +148,42 @@ class TestCorrelationShift:
         ])
         cont_samples = full_matrix[:, cont_indices]
 
-        shift = compute_correlation_shift(ref_corr, cont_samples)
+        shift, n_excluded = compute_correlation_shift(ref_corr, cont_samples)
         assert shift < 0.05, f"Expected low correlation shift, got {shift}"
+        assert n_excluded == 0
+
+    def test_zero_variance_columns_excluded(self, reference_distributions) -> None:
+        """Constant columns (e.g., all same hour) should not produce NaN."""
+        from demandops.monitoring.drift_detector import compute_correlation_shift
+
+        ref = json.loads(reference_distributions.read_text())
+        ref_corr = np.array(ref["correlation_matrix"])
+        n_cont = ref_corr.shape[0]
+
+        # Create data where 3 columns are constant (hour, day_of_week, is_weekend)
+        rng = np.random.RandomState(42)
+        n = 100
+        samples = rng.randn(n, n_cont)
+        samples[:, 0] = 12.0   # hour_of_day constant
+        samples[:, 1] = 3.0    # day_of_week constant
+        samples[:, 2] = 0.0    # is_weekend constant
+
+        shift, n_excluded = compute_correlation_shift(ref_corr, samples)
+        assert not np.isnan(shift), "correlation_shift should not be NaN"
+        assert n_excluded == 3
+
+    def test_all_constant_returns_zero(self, reference_distributions) -> None:
+        """If all columns are constant, shift should be 0, not NaN."""
+        from demandops.monitoring.drift_detector import compute_correlation_shift
+
+        ref = json.loads(reference_distributions.read_text())
+        ref_corr = np.array(ref["correlation_matrix"])
+        n_cont = ref_corr.shape[0]
+
+        samples = np.ones((100, n_cont))  # All constant
+        shift, n_excluded = compute_correlation_shift(ref_corr, samples)
+        assert shift == 0.0
+        assert n_excluded == n_cont
 
 
 class TestDriftAccumulator:

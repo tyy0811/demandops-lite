@@ -49,13 +49,33 @@ def compute_ks(
 
 def compute_correlation_shift(
     reference_corr: np.ndarray, current_continuous: np.ndarray
-) -> float:
-    """Frobenius norm of correlation matrix difference, normalized by feature pairs."""
-    current_corr = np.corrcoef(current_continuous, rowvar=False)
-    diff = current_corr - reference_corr
-    n = reference_corr.shape[0]
-    n_pairs = n * (n - 1) / 2
-    return float(np.linalg.norm(diff, "fro") / max(n_pairs, 1))
+) -> tuple[float, int]:
+    """Frobenius norm of correlation matrix difference, normalized by feature pairs.
+
+    Returns (shift, n_excluded) where n_excluded is the count of zero-variance
+    columns excluded from the computation. Zero-variance columns produce NaN
+    in np.corrcoef (e.g., all requests from the same hour).
+    """
+    variances = np.var(current_continuous, axis=0)
+    nonzero_mask = variances > 0
+
+    n_excluded = int(np.sum(~nonzero_mask))
+    n_valid = int(np.sum(nonzero_mask))
+
+    if n_valid < 2:
+        # Can't compute correlation with fewer than 2 varying columns
+        return 0.0, n_excluded
+
+    # Subset both current data and reference correlation to non-constant columns
+    valid_idx = np.where(nonzero_mask)[0]
+    current_subset = current_continuous[:, valid_idx]
+    ref_subset = reference_corr[np.ix_(valid_idx, valid_idx)]
+
+    current_corr = np.corrcoef(current_subset, rowvar=False)
+    diff = current_corr - ref_subset
+    n_pairs = n_valid * (n_valid - 1) / 2
+    shift = float(np.linalg.norm(diff, "fro") / max(n_pairs, 1))
+    return shift, n_excluded
 
 
 class DriftAccumulator:
@@ -148,8 +168,12 @@ class DriftDetector:
 
         # Correlation shift on continuous features only
         continuous_samples = samples[:, CONTINUOUS_INDICES]
-        corr_shift = compute_correlation_shift(self._ref_corr, continuous_samples)
+        corr_shift, n_excluded = compute_correlation_shift(
+            self._ref_corr, continuous_samples
+        )
         result["correlation_shift"] = round(corr_shift, 6)
+        if n_excluded > 0:
+            result["correlation_zero_variance_columns_excluded"] = n_excluded
 
         # Overall status
         verdicts = [f["verdict"] for f in result["features"].values()]
