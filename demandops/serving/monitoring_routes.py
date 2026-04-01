@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from demandops.security.auth import requires_auth
 from demandops.serving.schemas import ActualsRequest, ActualsResponse
@@ -26,12 +26,16 @@ async def quality_status(request: Request, window: str = "7d"):
     Includes drift-quality correlation when MAE exceeds threshold.
     """
     tracker = request.app.state.quality_tracker
-    result = tracker.compute_quality(window=window)
+    try:
+        result = tracker.compute_quality(window=window)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     # Drift-quality correlation: if quality is degraded, include drift status
     if result.get("status") == "ok":
-        mae_threshold = 3.20  # From regression gate
-        margin = 1.2
+        monitoring_cfg = getattr(request.app.state, "monitoring_config", {})
+        mae_threshold = monitoring_cfg.get("mae_threshold", 3.20)
+        margin = monitoring_cfg.get("mae_alert_margin", 1.2)
         if result.get("mae", 0) > mae_threshold * margin:
             detector = request.app.state.drift_detector
             if detector is not None:

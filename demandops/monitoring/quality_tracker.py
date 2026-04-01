@@ -92,8 +92,15 @@ class QualityTracker:
         }
 
     def compute_quality(self, window: str = "7d") -> dict:
-        """Compute quality metrics over matched pairs in the given window."""
-        days = int(window.rstrip("d"))
+        """Compute quality metrics over matched pairs in the given window.
+
+        Window format: "<int>d" (e.g. "7d", "30d"). Raises ValueError for
+        invalid format or non-positive values.
+        """
+        stripped = window.rstrip("d")
+        if not window.endswith("d") or not stripped.isdigit() or int(stripped) <= 0:
+            raise ValueError(f"Invalid window format '{window}', expected '<int>d' (e.g. '7d')")
+        days = int(stripped)
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
         rows = self._db.execute(

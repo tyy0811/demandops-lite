@@ -258,3 +258,31 @@ class TestQualityComputation:
         result = tracker.compute_quality(window="1d")
         assert result["status"] == "insufficient_matched_pairs"
         assert result["matched"] == 5
+
+    def test_invalid_window_format_raises(self, quality_db) -> None:
+        from demandops.monitoring.quality_tracker import QualityTracker
+
+        tracker = QualityTracker(quality_db)
+        with pytest.raises(ValueError, match="Invalid window format"):
+            tracker.compute_quality(window="7xd")
+
+    def test_negative_window_raises(self, quality_db) -> None:
+        from demandops.monitoring.quality_tracker import QualityTracker
+
+        tracker = QualityTracker(quality_db)
+        with pytest.raises(ValueError, match="Invalid window format"):
+            tracker.compute_quality(window="-7d")
+
+    def test_zero_window_raises(self, quality_db) -> None:
+        from demandops.monitoring.quality_tracker import QualityTracker
+
+        tracker = QualityTracker(quality_db)
+        with pytest.raises(ValueError, match="Invalid window format"):
+            tracker.compute_quality(window="0d")
+
+    def test_no_unit_suffix_raises(self, quality_db) -> None:
+        from demandops.monitoring.quality_tracker import QualityTracker
+
+        tracker = QualityTracker(quality_db)
+        with pytest.raises(ValueError, match="Invalid window format"):
+            tracker.compute_quality(window="7")

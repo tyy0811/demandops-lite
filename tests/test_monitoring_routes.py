@@ -169,3 +169,16 @@ class TestActualsEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["matched_count"] == 1
+
+    def test_incomplete_actual_rejected(self, monitoring_app, monitoring_client) -> None:
+        """Actual with neither prediction_id nor (zone_id, hour_ts) returns 422."""
+        resp = monitoring_client.post(
+            "/monitoring/actuals",
+            json={"actuals": [{"actual_value": 10.0}]},
+            headers={"Authorization": f"Bearer {monitoring_app.state._test_api_key}"},
+        )
+        assert resp.status_code == 422
+
+    def test_invalid_window_returns_422(self, monitoring_client) -> None:
+        resp = monitoring_client.get("/monitoring/quality?window=bad")
+        assert resp.status_code == 422

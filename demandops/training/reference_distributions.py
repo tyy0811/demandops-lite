@@ -67,9 +67,8 @@ def generate_reference_distributions(
     # Store as full-size matrix with NaN replaced by 0 for constant columns,
     # plus a mask so downstream consumers know which columns were valid.
     full_corr = np.zeros((len(CONTINUOUS_FEATURES), len(CONTINUOUS_FEATURES)))
-    for i_out, i_in in enumerate(valid_indices):
-        for j_out, j_in in enumerate(valid_indices):
-            full_corr[i_in, j_in] = corr[i_out, j_out]
+    if len(valid_indices) > 0:
+        full_corr[np.ix_(valid_indices, valid_indices)] = corr
 
     ref["correlation_matrix"] = full_corr.tolist()
     ref["correlation_features"] = CONTINUOUS_FEATURES

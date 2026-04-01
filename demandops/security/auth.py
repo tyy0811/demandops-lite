@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import threading
 import time
@@ -19,19 +20,23 @@ class RateLimiter:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._windows: dict[str, list[float]] = {}
+        self._windows: dict[str, collections.deque[float]] = {}
 
     def check(self, client_name: str, rate_limit: int) -> bool:
         """Return True if the request is allowed, False if rate limit exceeded."""
         now = time.time()
+        cutoff = now - 60
         with self._lock:
-            timestamps = self._windows.get(client_name, [])
-            timestamps = [t for t in timestamps if now - t < 60]
-            if len(timestamps) >= rate_limit:
-                self._windows[client_name] = timestamps
+            dq = self._windows.get(client_name)
+            if dq is None:
+                dq = collections.deque()
+                self._windows[client_name] = dq
+            # Evict expired timestamps from the left (oldest first)
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            if len(dq) >= rate_limit:
                 return False
-            timestamps.append(now)
-            self._windows[client_name] = timestamps
+            dq.append(now)
             return True
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PredictRequest(BaseModel):
@@ -68,6 +68,16 @@ class ActualSubmission(BaseModel):
     zone_id: int | None = None
     hour_ts: datetime | None = None
     actual_value: float
+
+    @model_validator(mode="after")
+    def require_matching_key(self) -> "ActualSubmission":
+        has_pid = self.prediction_id is not None
+        has_zone_ts = self.zone_id is not None and self.hour_ts is not None
+        if not has_pid and not has_zone_ts:
+            raise ValueError(
+                "Each actual must include either 'prediction_id' or both 'zone_id' and 'hour_ts'"
+            )
+        return self
 
 
 class ActualsRequest(BaseModel):

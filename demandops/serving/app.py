@@ -116,6 +116,13 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         # Initialize quality tracker
         app.state.quality_tracker = QualityTracker(db)
 
+        # Expose monitoring config for routes
+        quality_cfg = config.get("monitoring", {}).get("quality", {})
+        app.state.monitoring_config = {
+            "mae_threshold": 3.20,  # From regression gate
+            "mae_alert_margin": quality_cfg.get("mae_alert_margin", 1.2),
+        }
+
         logger.info(
             "app_started",
             model=model_name,

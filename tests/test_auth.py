@@ -7,7 +7,7 @@ import secrets
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from demandops.db import get_db
@@ -52,7 +52,7 @@ def auth_app(auth_db) -> FastAPI:
     app.state.rate_limiter = RateLimiter()
 
     @app.get("/protected")
-    async def protected(client: dict = pytest.importorskip("fastapi").Depends(requires_auth)):
+    async def protected(client: dict = Depends(requires_auth)):
         return {"client_name": client["client_name"]}
 
     return app
