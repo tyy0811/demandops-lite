@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -38,7 +36,12 @@ def active_client(auth_db, raw_key) -> dict:
         (key_hash, "test_client", "2024-01-01T00:00:00", 100, 10000, True),
     )
     auth_db.commit()
-    return {"raw_key": raw_key, "client_name": "test_client", "rate_limit": 100, "max_batch_size": 10000}
+    return {
+        "raw_key": raw_key,
+        "client_name": "test_client",
+        "rate_limit": 100,
+        "max_batch_size": 10000,
+    }
 
 
 @pytest.fixture

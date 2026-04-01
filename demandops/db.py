@@ -40,10 +40,7 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             created_at      TEXT NOT NULL
         )
     """)
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_pred_zone_ts "
-        "ON prediction_log(zone_id, hour_ts)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pred_zone_ts ON prediction_log(zone_id, hour_ts)")
     conn.commit()
 
 

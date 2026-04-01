@@ -50,6 +50,18 @@ artifacts:
   reports_dir: artifacts/reports
   feature_schema_path: artifacts/models/feature_schema.json
   zone_universe_path: artifacts/zone_universe.json
+  reference_distributions_path: artifacts/reference_distributions.json
+
+db:
+  path: data/demandops.db
+
+monitoring:
+  drift:
+    min_samples: 100
+    maxlen: 1000
+  quality:
+    min_matched_pairs: 10
+    mae_alert_margin: 1.2
 
 serving:
   host: "0.0.0.0"

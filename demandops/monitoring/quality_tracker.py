@@ -22,9 +22,7 @@ class QualityTracker:
         self._db = db
         self._lock = threading.Lock()
 
-    def log_prediction(
-        self, zone_id: int, hour_ts: str, predicted_value: float
-    ) -> str:
+    def log_prediction(self, zone_id: int, hour_ts: str, predicted_value: float) -> str:
         """Log a prediction. Returns the prediction_id (UUID)."""
         prediction_id = str(uuid.uuid4())
         with self._lock:
@@ -58,16 +56,13 @@ class QualityTracker:
                     ).fetchone()
                     if row:
                         self._db.execute(
-                            "UPDATE prediction_log SET actual_value = ? "
-                            "WHERE prediction_id = ?",
+                            "UPDATE prediction_log SET actual_value = ? WHERE prediction_id = ?",
                             (actual["actual_value"], actual["prediction_id"]),
                         )
                         matched += 1
                     else:
                         unmatched += 1
-                        warnings.append(
-                            f"prediction_id {actual['prediction_id']} not found"
-                        )
+                        warnings.append(f"prediction_id {actual['prediction_id']} not found")
                 else:
                     # Match by (zone_id, hour_ts) — most recent prediction
                     row = self._db.execute(
@@ -78,8 +73,7 @@ class QualityTracker:
                     ).fetchone()
                     if row:
                         self._db.execute(
-                            "UPDATE prediction_log SET actual_value = ? "
-                            "WHERE prediction_id = ?",
+                            "UPDATE prediction_log SET actual_value = ? WHERE prediction_id = ?",
                             (actual["actual_value"], row[0]),
                         )
                         matched += 1
@@ -128,7 +122,8 @@ class QualityTracker:
         if nonzero_mask.any():
             smape = float(
                 np.mean(
-                    2 * np.abs(preds[nonzero_mask] - actuals[nonzero_mask])
+                    2
+                    * np.abs(preds[nonzero_mask] - actuals[nonzero_mask])
                     / denominator[nonzero_mask]
                 )
                 * 100

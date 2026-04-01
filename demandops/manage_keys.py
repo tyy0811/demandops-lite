@@ -45,7 +45,14 @@ def create_key(
     db.execute(
         "INSERT INTO api_keys (key_hash, client_name, created_at, rate_limit, max_batch_size, is_active) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (key_hash, client_name, datetime.now(timezone.utc).isoformat(), rate_limit, max_batch_size, True),
+        (
+            key_hash,
+            client_name,
+            datetime.now(timezone.utc).isoformat(),
+            rate_limit,
+            max_batch_size,
+            True,
+        ),
     )
     db.commit()
     return raw_key
@@ -75,9 +82,7 @@ def revoke_key(db: sqlite3.Connection, client_name: str) -> None:
     ).fetchone()
     if row is None:
         raise ValueError(f"Client '{client_name}' not found")
-    db.execute(
-        "UPDATE api_keys SET is_active = 0 WHERE client_name = ?", (client_name,)
-    )
+    db.execute("UPDATE api_keys SET is_active = 0 WHERE client_name = ?", (client_name,))
     db.commit()
 
 
@@ -112,8 +117,10 @@ def main() -> None:
             print("No API keys found.")
         for k in keys:
             status = "active" if k["is_active"] else "REVOKED"
-            print(f"  {k['client_name']}: rate_limit={k['rate_limit']}, "
-                  f"max_batch={k['max_batch_size']}, {status}, created={k['created_at']}")
+            print(
+                f"  {k['client_name']}: rate_limit={k['rate_limit']}, "
+                f"max_batch={k['max_batch_size']}, {status}, created={k['created_at']}"
+            )
     elif args.command == "revoke":
         revoke_key(db, args.client)
         print(f"Key revoked for '{args.client}'")

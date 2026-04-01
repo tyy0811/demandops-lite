@@ -95,10 +95,12 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         )
 
         # Initialize drift detector (graceful degradation if reference missing)
-        ref_path = Path(config["artifacts"].get(
-            "reference_distributions_path",
-            "artifacts/reference_distributions.json",
-        ))
+        ref_path = Path(
+            config["artifacts"].get(
+                "reference_distributions_path",
+                "artifacts/reference_distributions.json",
+            )
+        )
         if ref_path.exists():
             monitoring_cfg = config.get("monitoring", {}).get("drift", {})
             app.state.drift_detector = DriftDetector(

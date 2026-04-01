@@ -17,9 +17,7 @@ from demandops.security.auth import RateLimiter, hash_key
 
 
 @pytest.fixture
-def integration_app(
-    mock_feature_service, mock_model, tmp_path: Path
-) -> tuple[FastAPI, str]:
+def integration_app(mock_feature_service, mock_model, tmp_path: Path) -> tuple[FastAPI, str]:
     """Full app with auth, drift detector, and quality tracker."""
     from demandops.monitoring.drift_detector import DriftDetector
     from demandops.monitoring.quality_tracker import QualityTracker
@@ -43,9 +41,7 @@ def integration_app(
             "ks_subsample": values.tolist(),
         }
     cont = [c for c in FEATURE_COLUMNS if c != "zone_id"]
-    full = np.column_stack([
-        np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS
-    ])
+    full = np.column_stack([np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS])
     ref["correlation_matrix"] = np.corrcoef(
         full[:, [FEATURE_COLUMNS.index(c) for c in cont]], rowvar=False
     ).tolist()
@@ -70,8 +66,13 @@ def integration_app(
     app.include_router(monitoring_router)
 
     configure(
-        app, mock_feature_service, mock_model, "lightgbm", time.time(),
-        model_artifact_loaded=True, model_objective="regression",
+        app,
+        mock_feature_service,
+        mock_model,
+        "lightgbm",
+        time.time(),
+        model_artifact_loaded=True,
+        model_objective="regression",
         model_version="lightgbm-regression",
     )
 
@@ -123,10 +124,12 @@ class TestPredictionToDriftPipeline:
 
         resp = client.post(
             "/predict/batch",
-            json={"requests": [
-                {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
-                {"zone_id": 2, "hour_ts": "2024-02-01T13:00:00"},
-            ]},
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                    {"zone_id": 2, "hour_ts": "2024-02-01T13:00:00"},
+                ]
+            },
             headers=headers,
         )
         assert resp.status_code == 200

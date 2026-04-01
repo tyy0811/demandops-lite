@@ -47,12 +47,10 @@ def monitoring_reference(tmp_path: Path) -> Path:
 
     cont_features = [c for c in FEATURE_COLUMNS if c != "zone_id"]
     cont_indices = [FEATURE_COLUMNS.index(c) for c in cont_features]
-    full_matrix = np.column_stack([
-        np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS
-    ])
-    ref["correlation_matrix"] = np.corrcoef(
-        full_matrix[:, cont_indices], rowvar=False
-    ).tolist()
+    full_matrix = np.column_stack(
+        [np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS]
+    )
+    ref["correlation_matrix"] = np.corrcoef(full_matrix[:, cont_indices], rowvar=False).tolist()
     ref["correlation_features"] = cont_features
 
     path = tmp_path / "reference_distributions.json"

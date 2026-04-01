@@ -24,9 +24,7 @@ class TestPredictionLogging:
         from demandops.monitoring.quality_tracker import QualityTracker
 
         tracker = QualityTracker(quality_db)
-        pid = tracker.log_prediction(
-            zone_id=1, hour_ts="2024-02-01T12:00:00", predicted_value=42.5
-        )
+        pid = tracker.log_prediction(zone_id=1, hour_ts="2024-02-01T12:00:00", predicted_value=42.5)
         assert isinstance(pid, str)
         assert len(pid) == 36  # UUID format
 
@@ -34,9 +32,7 @@ class TestPredictionLogging:
         from demandops.monitoring.quality_tracker import QualityTracker
 
         tracker = QualityTracker(quality_db)
-        pid = tracker.log_prediction(
-            zone_id=1, hour_ts="2024-02-01T12:00:00", predicted_value=42.5
-        )
+        pid = tracker.log_prediction(zone_id=1, hour_ts="2024-02-01T12:00:00", predicted_value=42.5)
         row = quality_db.execute(
             "SELECT zone_id, predicted_value, actual_value FROM prediction_log WHERE prediction_id = ?",
             (pid,),
@@ -69,9 +65,7 @@ class TestPredictionLogging:
             t.join()
 
         assert errors == [], f"Concurrent writes failed: {errors}"
-        count = quality_db.execute(
-            "SELECT COUNT(*) FROM prediction_log"
-        ).fetchone()[0]
+        count = quality_db.execute("SELECT COUNT(*) FROM prediction_log").fetchone()[0]
         assert count == 200
 
 
@@ -82,9 +76,11 @@ class TestActualsSubmission:
         tracker = QualityTracker(quality_db)
         pid = tracker.log_prediction(1, "2024-02-01T12:00:00", 42.5)
 
-        result = tracker.submit_actuals([
-            {"prediction_id": pid, "actual_value": 40.0},
-        ])
+        result = tracker.submit_actuals(
+            [
+                {"prediction_id": pid, "actual_value": 40.0},
+            ]
+        )
         assert result["matched_count"] == 1
         assert result["unmatched_count"] == 0
 
@@ -100,9 +96,11 @@ class TestActualsSubmission:
         tracker = QualityTracker(quality_db)
         tracker.log_prediction(1, "2024-02-01T12:00:00", 42.5)
 
-        result = tracker.submit_actuals([
-            {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00", "actual_value": 40.0},
-        ])
+        result = tracker.submit_actuals(
+            [
+                {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00", "actual_value": 40.0},
+            ]
+        )
         assert result["matched_count"] == 1
 
     def test_ambiguous_match_uses_most_recent(self, quality_db) -> None:
@@ -112,9 +110,11 @@ class TestActualsSubmission:
         pid1 = tracker.log_prediction(1, "2024-02-01T12:00:00", 30.0)
         pid2 = tracker.log_prediction(1, "2024-02-01T12:00:00", 42.5)
 
-        tracker.submit_actuals([
-            {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00", "actual_value": 40.0},
-        ])
+        tracker.submit_actuals(
+            [
+                {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00", "actual_value": 40.0},
+            ]
+        )
 
         # Most recent (pid2) should be matched
         row1 = quality_db.execute(
@@ -132,9 +132,11 @@ class TestActualsSubmission:
         from demandops.monitoring.quality_tracker import QualityTracker
 
         tracker = QualityTracker(quality_db)
-        result = tracker.submit_actuals([
-            {"prediction_id": "nonexistent-id", "actual_value": 40.0},
-        ])
+        result = tracker.submit_actuals(
+            [
+                {"prediction_id": "nonexistent-id", "actual_value": 40.0},
+            ]
+        )
         assert result["unmatched_count"] == 1
         assert len(result["warnings"]) == 1
 
@@ -147,8 +149,7 @@ class TestQualityComputation:
             pid = tracker.log_prediction(1, "2024-02-01T12:00:00", pred)
             pids.append(pid)
         actuals = [
-            {"prediction_id": pid, "actual_value": actual}
-            for pid, (_, actual) in zip(pids, pairs)
+            {"prediction_id": pid, "actual_value": actual} for pid, (_, actual) in zip(pids, pairs)
         ]
         tracker.submit_actuals(actuals)
 
@@ -156,8 +157,18 @@ class TestQualityComputation:
         from demandops.monitoring.quality_tracker import QualityTracker
 
         tracker = QualityTracker(quality_db)
-        pairs = [(10, 12), (20, 18), (30, 33), (40, 38), (50, 52),
-                 (60, 58), (70, 73), (80, 78), (90, 92), (100, 98)]
+        pairs = [
+            (10, 12),
+            (20, 18),
+            (30, 33),
+            (40, 38),
+            (50, 52),
+            (60, 58),
+            (70, 73),
+            (80, 78),
+            (90, 92),
+            (100, 98),
+        ]
         self._seed_matched_pairs(tracker, pairs)
 
         result = tracker.compute_quality(window="7d")
@@ -170,8 +181,18 @@ class TestQualityComputation:
         from demandops.monitoring.quality_tracker import QualityTracker
 
         tracker = QualityTracker(quality_db)
-        pairs = [(10, 12), (20, 18), (30, 33), (40, 38), (50, 52),
-                 (60, 58), (70, 73), (80, 78), (90, 92), (100, 98)]
+        pairs = [
+            (10, 12),
+            (20, 18),
+            (30, 33),
+            (40, 38),
+            (50, 52),
+            (60, 58),
+            (70, 73),
+            (80, 78),
+            (90, 92),
+            (100, 98),
+        ]
         self._seed_matched_pairs(tracker, pairs)
 
         result = tracker.compute_quality(window="7d")
@@ -183,8 +204,18 @@ class TestQualityComputation:
 
         tracker = QualityTracker(quality_db)
         # Include zero actuals that would make MAPE infinite
-        pairs = [(10, 12), (5, 0), (0, 0), (20, 18), (30, 33),
-                 (40, 38), (50, 52), (60, 58), (70, 73), (80, 78)]
+        pairs = [
+            (10, 12),
+            (5, 0),
+            (0, 0),
+            (20, 18),
+            (30, 33),
+            (40, 38),
+            (50, 52),
+            (60, 58),
+            (70, 73),
+            (80, 78),
+        ]
         self._seed_matched_pairs(tracker, pairs)
 
         result = tracker.compute_quality(window="7d")

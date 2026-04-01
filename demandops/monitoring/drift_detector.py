@@ -39,9 +39,7 @@ def compute_psi(
     return float(np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct)))
 
 
-def compute_ks(
-    reference_sample: np.ndarray, current_values: np.ndarray
-) -> tuple[float, float]:
+def compute_ks(reference_sample: np.ndarray, current_values: np.ndarray) -> tuple[float, float]:
     """KS two-sample test. Returns (statistic, p_value)."""
     stat, p_value = stats.ks_2samp(reference_sample, current_values)
     return float(stat), float(p_value)
@@ -156,9 +154,7 @@ class DriftDetector:
                 np.array(feature_ref["bin_counts"]),
                 current_values,
             )
-            ks_stat, ks_pvalue = compute_ks(
-                np.array(feature_ref["ks_subsample"]), current_values
-            )
+            ks_stat, ks_pvalue = compute_ks(np.array(feature_ref["ks_subsample"]), current_values)
 
             if psi > PSI_ALERT or ks_pvalue < KS_ALPHA:
                 verdict = "alert"
@@ -176,9 +172,7 @@ class DriftDetector:
 
         # Correlation shift on continuous features only
         continuous_samples = samples[:, CONTINUOUS_INDICES]
-        corr_shift, n_excluded = compute_correlation_shift(
-            self._ref_corr, continuous_samples
-        )
+        corr_shift, n_excluded = compute_correlation_shift(self._ref_corr, continuous_samples)
         result["correlation_shift"] = round(corr_shift, 6)
         if n_excluded > 0:
             result["correlation_zero_variance_columns_excluded"] = n_excluded

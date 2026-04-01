@@ -47,9 +47,9 @@ def reference_distributions(tmp_path: Path) -> Path:
     # Correlation matrix on continuous features only
     cont_features = [c for c in FEATURE_COLUMNS if c != "zone_id"]
     cont_indices = [FEATURE_COLUMNS.index(c) for c in cont_features]
-    full_matrix = np.column_stack([
-        np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS
-    ])
+    full_matrix = np.column_stack(
+        [np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS]
+    )
     cont_matrix = full_matrix[:, cont_indices]
     ref["correlation_matrix"] = np.corrcoef(cont_matrix, rowvar=False).tolist()
     ref["correlation_features"] = cont_features
@@ -143,9 +143,9 @@ class TestCorrelationShift:
         cont_indices = [FEATURE_COLUMNS.index(c) for c in cont_features]
 
         # Use the reference data itself
-        full_matrix = np.column_stack([
-            np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS
-        ])
+        full_matrix = np.column_stack(
+            [np.array(ref["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS]
+        )
         cont_samples = full_matrix[:, cont_indices]
 
         shift, n_excluded = compute_correlation_shift(ref_corr, cont_samples)
@@ -164,9 +164,9 @@ class TestCorrelationShift:
         rng = np.random.RandomState(42)
         n = 100
         samples = rng.randn(n, n_cont)
-        samples[:, 0] = 12.0   # hour_of_day constant
-        samples[:, 1] = 3.0    # day_of_week constant
-        samples[:, 2] = 0.0    # is_weekend constant
+        samples[:, 0] = 12.0  # hour_of_day constant
+        samples[:, 1] = 3.0  # day_of_week constant
+        samples[:, 2] = 0.0  # is_weekend constant
 
         shift, n_excluded = compute_correlation_shift(ref_corr, samples)
         assert not np.isnan(shift), "correlation_shift should not be NaN"
@@ -294,8 +294,7 @@ class TestDriftDetector:
         assert result["status"] == "ok"
         for feature_name, metrics in result["features"].items():
             assert metrics["verdict"] == "ok", (
-                f"False alarm on {feature_name}: PSI={metrics['psi']}, "
-                f"KS p={metrics['ks_pvalue']}"
+                f"False alarm on {feature_name}: PSI={metrics['psi']}, KS p={metrics['ks_pvalue']}"
             )
 
     def test_detects_shifted_feature(self, reference_distributions) -> None:

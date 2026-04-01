@@ -129,9 +129,7 @@ class TestSchemaMigration:
         # Reopen through get_db — should migrate
         conn = get_db(db_path)
         # Existing row preserved
-        row = conn.execute(
-            "SELECT client_name FROM api_keys WHERE key_hash = 'h1'"
-        ).fetchone()
+        row = conn.execute("SELECT client_name FROM api_keys WHERE key_hash = 'h1'").fetchone()
         assert row[0] == "team_a"
         # UNIQUE constraint now enforced
         with pytest.raises(sqlite3.IntegrityError):
@@ -180,9 +178,7 @@ class TestSchemaMigration:
         ).fetchone()[0]
         assert count == 1
         # Most recent key (highest rowid) should survive
-        row = conn.execute(
-            "SELECT key_hash FROM api_keys WHERE client_name = 'team_a'"
-        ).fetchone()
+        row = conn.execute("SELECT key_hash FROM api_keys WHERE client_name = 'team_a'").fetchone()
         assert row[0] == "new_hash"
         conn.close()
 
@@ -227,8 +223,6 @@ class TestSchemaMigration:
         conn1.close()
         # Migrate again — should be a no-op
         conn2 = get_db(db_path)
-        row = conn2.execute(
-            "SELECT client_name FROM api_keys WHERE key_hash = 'h1'"
-        ).fetchone()
+        row = conn2.execute("SELECT client_name FROM api_keys WHERE key_hash = 'h1'").fetchone()
         assert row[0] == "team_a"
         conn2.close()

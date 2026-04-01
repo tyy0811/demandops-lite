@@ -205,9 +205,7 @@ async def predict_batch(
         # Feed drift accumulator with all feature vectors
         drift_detector = getattr(request.app.state, "drift_detector", None)
         if drift_detector is not None:
-            drift_detector.accumulator.add_batch(
-                [[f[col] for col in f] for f in feature_dicts]
-            )
+            drift_detector.accumulator.add_batch([[f[col] for col in f] for f in feature_dicts])
 
         # Phase 3: Build responses
         quality_tracker = getattr(request.app.state, "quality_tracker", None)

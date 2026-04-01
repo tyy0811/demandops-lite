@@ -271,6 +271,49 @@ Returns model/history load status, model objective, version, and supported zones
 
 Prometheus-format metrics: request counts, latency histograms, prediction value distribution, rejection/error counters.
 
+## Monitoring & Security
+
+### API Key Authentication
+
+All prediction endpoints require a Bearer token. Keys are SHA-256 hashed and stored in SQLite — raw keys are never persisted.
+
+```bash
+# Create a key (shown once)
+python -m demandops.manage_keys create --client "analytics_team" --rate-limit 100
+
+# List keys (hashes never shown)
+python -m demandops.manage_keys list
+
+# Revoke
+python -m demandops.manage_keys revoke --client "analytics_team"
+```
+
+Per-client rate limiting (sliding window, 60s) and per-key batch size enforcement.
+
+### Drift Detection
+
+Three complementary methods detect data drift against training reference distributions:
+
+| Method | What it catches | Threshold |
+|--------|----------------|-----------|
+| **PSI** (Population Stability Index) | Distributional shift per feature | >0.1 warning, >0.25 alert |
+| **KS test** (Kolmogorov-Smirnov) | Distribution-wide sensitivity | p < 0.05 = drift |
+| **Correlation matrix** (Frobenius norm) | Joint distribution shifts | >0.1 = alert |
+
+Feature vectors accumulate passively; drift computed on-demand via `GET /monitoring/drift`.
+
+### Quality Monitoring
+
+Predictions are logged with UUIDs. Submit ground truth via `POST /monitoring/actuals` to compute sMAPE, MAE, and RMSE over rolling windows. When quality degrades, the drift status is included for correlation.
+
+### Monitoring Endpoints
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /monitoring/drift` | No | Per-feature drift status (PSI, KS, correlation) |
+| `GET /monitoring/quality?window=7d` | No | sMAPE/MAE/RMSE over matched prediction-actual pairs |
+| `POST /monitoring/actuals` | Yes | Submit ground truth for quality tracking |
+
 ## Docker
 
 ```bash
