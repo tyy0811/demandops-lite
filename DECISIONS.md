@@ -245,3 +245,21 @@ TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemen
 **Decision:** Drift metrics are computed only when `GET /monitoring/drift` is called. Feature vectors accumulate passively in a bounded deque (maxlen=1000) — no background threads, no periodic timers.
 
 **Why:** Continuous monitoring with background threads adds concurrency complexity (thread-safe accumulation, periodic scheduling, timer management) to a serving layer that is otherwise stateless. The on-demand approach gives the same cross-request drift picture without the complexity. The deque accumulates samples passively from all prediction requests; the drift endpoint is the computation trigger. Simpler to test, no concurrency bugs beyond the deque's own thread-safe append.
+
+## 31. Prometheus Gauges Updated on Endpoint Call (Not Continuously)
+
+**Decision:** Drift and quality Prometheus gauges (`demandops_drift_psi`, `demandops_quality_mae`, etc.) are set when their respective monitoring endpoints are called, not on every prediction request.
+
+**Why:** Follows from Decision #30 (on-demand drift). Computing PSI/KS/correlation on every request would add ~50ms latency to the prediction path. Instead, the gauges update when an operator or Grafana hits `/monitoring/drift` or `/monitoring/quality` — which is also when the JSON response is computed. The scrape interval in Prometheus (typically 15–60s) controls freshness, not the prediction path.
+
+## 32. ASGI Request Size Limit (10MB)
+
+**Decision:** A `RequestSizeLimitMiddleware` rejects requests with `Content-Length` exceeding 10MB before JSON parsing.
+
+**Why:** The Pydantic `max_length=10_000` on `BatchPredictRequest` validates record count after parsing, but a malicious client could send an arbitrarily large JSON body that consumes memory during parsing. The 10MB limit is generous for legitimate use (a 10K-record batch is ~3MB) while blocking pathological payloads at the ASGI layer, before any deserialization occurs.
+
+## 33. Per-Client Usage Tracking via SQLite UPSERT
+
+**Decision:** Usage is tracked in a `usage_log` table with a `(client_name, endpoint, date)` composite primary key, incremented via `INSERT ... ON CONFLICT DO UPDATE` on each successful prediction.
+
+**Why:** The rate limiter is in-memory and resets on restart (by design — Decision #30). Usage tracking needs to survive restarts for billing/auditing visibility. SQLite UPSERT aggregates per day without requiring a separate counter service. One row per client per endpoint per day keeps the table small even over months of operation.
