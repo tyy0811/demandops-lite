@@ -99,6 +99,20 @@ async def predict(body: PredictRequest, request: Request, client: dict = Depends
         REQUEST_COUNT.labels(endpoint="/predict", status="200").inc()
         REQUEST_LATENCY.labels(endpoint="/predict").observe(time.perf_counter() - start)
 
+        # Feed drift accumulator
+        drift_detector = getattr(request.app.state, "drift_detector", None)
+        if drift_detector is not None:
+            drift_detector.accumulator.add([features[col] for col in features])
+
+        # Log to quality tracker
+        quality_tracker = getattr(request.app.state, "quality_tracker", None)
+        if quality_tracker is not None:
+            prediction_id = quality_tracker.log_prediction(
+                zone_id=body.zone_id,
+                hour_ts=body.hour_ts.isoformat(),
+                predicted_value=predicted_count,
+            )
+
         logger.info(
             "prediction",
             zone_id=body.zone_id,
@@ -188,15 +202,34 @@ async def predict_batch(
         )
         raw_preds = model.predict(X)
 
+        # Feed drift accumulator with all feature vectors
+        drift_detector = getattr(request.app.state, "drift_detector", None)
+        if drift_detector is not None:
+            drift_detector.accumulator.add_batch(
+                [[f[col] for col in f] for f in feature_dicts]
+            )
+
         # Phase 3: Build responses
+        quality_tracker = getattr(request.app.state, "quality_tracker", None)
         predictions = []
         for i, req in enumerate(body.requests):
             predicted_count = float(raw_preds[i])
             PREDICTION_COUNT.inc()
             PREDICTION_VALUE.observe(predicted_count)
+
+            # Log to quality tracker
+            if quality_tracker is not None:
+                pred_id = quality_tracker.log_prediction(
+                    zone_id=req.zone_id,
+                    hour_ts=req.hour_ts.isoformat(),
+                    predicted_value=predicted_count,
+                )
+            else:
+                pred_id = str(uuid.uuid4())
+
             predictions.append(
                 PredictResponse(
-                    prediction_id=str(uuid.uuid4()),
+                    prediction_id=pred_id,
                     zone_id=req.zone_id,
                     zone_name=zone_names[i],
                     hour_ts=req.hour_ts,

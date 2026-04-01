@@ -256,6 +256,7 @@ def api_key(test_db) -> str:
 @pytest.fixture
 def test_app(mock_feature_service, mock_model, test_db, api_key):
     from fastapi import FastAPI
+    from demandops.monitoring.quality_tracker import QualityTracker
     from demandops.security.auth import RateLimiter
     from demandops.serving.routes import configure, router
 
@@ -263,6 +264,8 @@ def test_app(mock_feature_service, mock_model, test_db, api_key):
     app.include_router(router)
     app.state.db = test_db
     app.state.rate_limiter = RateLimiter()
+    app.state.quality_tracker = QualityTracker(test_db)
+    app.state.drift_detector = None  # No reference distributions in unit tests
     configure(
         app,
         mock_feature_service,
