@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir .
 COPY demandops/ demandops/
 COPY configs/ configs/
 
+# Create writable data directory for runtime SQLite database
+RUN mkdir -p data
+
 EXPOSE 8001
 
 CMD ["uvicorn", "demandops.serving.app:app", "--host", "0.0.0.0", "--port", "8001"]
