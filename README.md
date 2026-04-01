@@ -21,7 +21,9 @@ End-to-end demand prediction pipeline with DatasetAdapter pattern — from data 
 | LightGBM MAE | **2.90** | 0.77 | **0.95** |
 | LightGBM vs Slot Mean | -14.6% | +1.9% | -7.7% |
 
-LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.6% MAE), while low-variance bike stations are well-served by a simple historical mean (+1.9%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 35 documented design rationales.
+![Benchmark Comparison](docs/benchmark_comparison.png)
+
+LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.7% MAE), while low-variance bike stations are well-served by a simple historical mean (+2.7%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 35 documented design rationales.
 
 Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md) | [`docs/benchmark_report_citibike.md`](docs/benchmark_report_citibike.md)
 
