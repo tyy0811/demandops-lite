@@ -2,15 +2,15 @@
 
 ![CI](https://github.com/tyy0811/demandops-lite/actions/workflows/ci.yaml/badge.svg)
 
-Same pipeline, three datasets, two cities: NYC taxi (261 zones) + London bike-share (802 stations) + NYC bike-share (2,144 stations). LightGBM, FastAPI, Pandera contracts, Prometheus monitoring, 112 tests.
+Same pipeline, three datasets, two cities: NYC taxi (261 zones) + London bike-share (802 stations) + NYC bike-share (2,144 stations). LightGBM, FastAPI, Pandera contracts, Prometheus monitoring, API key auth, drift detection, quality tracking, 216 tests.
 
-End-to-end demand prediction pipeline with DatasetAdapter pattern — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference.
+End-to-end demand prediction pipeline with DatasetAdapter pattern — from data contracts through honest baselines to lag-aware one-step-ahead monitored inference with drift detection and API security.
 
-> **112 tests | 3 datasets | 3,207 zones/stations | Prometheus `/metrics` | Docker ready**
+> **216 tests | 3 datasets | 3,207 zones/stations | Prometheus `/metrics` | Drift detection | API auth | Docker ready**
 
 ## Triple-Dataset Benchmark
 
-**Production-grade ML pipeline serving 3 datasets across 2 cities and 3,207 zones/stations, with 28 dbt tests, 112 Python tests, CI quality gates, and a MAE regression gate — same code, same features, same model for every dataset.**
+**Production-grade ML pipeline serving 3 datasets across 2 cities and 3,207 zones/stations, with 28 dbt tests, 216 Python tests, CI quality gates, and a MAE regression gate — same code, same features, same model for every dataset.**
 
 | Metric | NYC Taxi | London Bike-Share | NYC Bike-Share |
 |--------|----------|-------------------|----------------|
@@ -21,7 +21,7 @@ End-to-end demand prediction pipeline with DatasetAdapter pattern — from data 
 | LightGBM MAE | **2.90** | 0.77 | **0.95** |
 | LightGBM vs Slot Mean | -14.6% | +1.9% | -7.7% |
 
-LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.6% MAE), while low-variance bike stations are well-served by a simple historical mean (+1.9%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 23 documented design rationales.
+LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.6% MAE), while low-variance bike stations are well-served by a simple historical mean (+1.9%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 30 documented design rationales.
 
 Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md) | [`docs/benchmark_report_citibike.md`](docs/benchmark_report_citibike.md)
 
@@ -34,8 +34,9 @@ Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/be
 - **Train-serve parity**: FeatureService reconstructs identical lag features at inference time
 - **Batch inference**: `/predict/batch` for up to 10K vectorized predictions per request
 - **ML quality gates**: MAE regression gate in CI with frozen test fixture
-- **Monitoring**: Prometheus counters, latency histograms, prediction distribution
-- **Production patterns**: Docker, CI, structured logging, config-driven, graceful degradation
+- **Monitoring**: Prometheus counters/gauges, latency histograms, prediction distribution, data drift detection (PSI/KS/correlation), quality tracking (sMAPE/MAE/RMSE)
+- **Security**: API key auth (SHA-256 hashed), per-client rate limiting, per-key batch size enforcement, usage tracking
+- **Production patterns**: Docker, CI, structured logging, config-driven, graceful degradation, schema migrations
 
 ## V1 → V2 Improvements
 
@@ -150,20 +151,28 @@ demandops-lite/
 │   │   ├── registry.py          # DemandModel ABC + factory
 │   │   ├── baselines.py         # Slot mean, seasonal naive
 │   │   └── lightgbm_model.py    # LightGBM with clipping + predict_raw
+│   ├── db.py                    # Shared SQLite (WAL mode, schema migration)
+│   ├── manage_keys.py           # CLI: create/list/revoke API keys
 │   ├── training/
 │   │   ├── train.py             # Train all models, MLflow logging
-│   │   └── evaluate.py          # Metrics, per-zone analysis, edge cases
+│   │   ├── evaluate.py          # Metrics, per-zone analysis, edge cases
+│   │   └── reference_distributions.py  # PSI/KS/correlation reference artifact
 │   ├── serving/
 │   │   ├── app.py               # FastAPI factory (graceful degradation)
 │   │   ├── routes.py            # /predict, /predict/batch, /health, /metrics
+│   │   ├── monitoring_routes.py # /monitoring/drift, /quality, /actuals, /usage
 │   │   ├── feature_service.py   # Lag reconstruction from dense history
 │   │   ├── schemas.py           # Pydantic request/response models
-│   │   ├── metrics.py           # Prometheus counters/histograms
-│   │   └── middleware.py        # Request logging
-│   └── monitoring/
-│       └── checks.py            # Sparse zone, extreme prediction checks
+│   │   ├── metrics.py           # Prometheus counters/histograms/gauges
+│   │   └── middleware.py        # Request logging + size limit
+│   ├── monitoring/
+│   │   ├── drift_detector.py    # PSI, KS test, correlation shift
+│   │   ├── quality_tracker.py   # Prediction logging, actuals, sMAPE/MAE/RMSE
+│   │   └── checks.py            # Sparse zone, extreme prediction checks
+│   └── security/
+│       └── auth.py              # API key auth, rate limiting, usage tracking
 ├── scripts/                     # CLI entrypoints (all accept --config)
-├── tests/                       # 112 tests
+├── tests/                       # 216 tests
 ├── docker/                      # Dockerfile + docker-compose
 ├── .github/workflows/ci.yaml   # GitHub Actions (test + Docker smoke test)
 └── Makefile                     # Pipeline targets
@@ -313,6 +322,7 @@ Predictions are logged with UUIDs. Submit ground truth via `POST /monitoring/act
 | `GET /monitoring/drift` | No | Per-feature drift status (PSI, KS, correlation) |
 | `GET /monitoring/quality?window=7d` | No | sMAPE/MAE/RMSE over matched prediction-actual pairs |
 | `POST /monitoring/actuals` | Yes | Submit ground truth for quality tracking |
+| `GET /monitoring/usage?client=<name>` | No | Per-client request counts and record totals |
 
 ## Docker
 
@@ -349,7 +359,7 @@ make dbt-docs       # browse at http://localhost:8080
 ## Development
 
 ```bash
-make test       # Run 112 tests
+make test       # Run 216 tests
 make lint       # ruff check + format --check
 make format     # Auto-fix formatting
 make clean      # Remove generated data/artifacts
