@@ -9,9 +9,14 @@ import structlog
 import yaml
 from fastapi import FastAPI
 
+from demandops.db import get_db
 from demandops.models.registry import create_model
+from demandops.monitoring.drift_detector import DriftDetector
+from demandops.monitoring.quality_tracker import QualityTracker
+from demandops.security.auth import RateLimiter
 from demandops.serving.feature_service import FeatureService
-from demandops.serving.middleware import RequestLoggingMiddleware
+from demandops.serving.middleware import RequestLoggingMiddleware, RequestSizeLimitMiddleware
+from demandops.serving.monitoring_routes import monitoring_router
 from demandops.serving.routes import configure, router
 
 logger = structlog.get_logger()
@@ -27,7 +32,9 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         version="0.1.0",
     )
     app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
     app.include_router(router)
+    app.include_router(monitoring_router)
 
     @app.on_event("startup")
     async def startup():
@@ -36,6 +43,12 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         feature_service = None
         model = None
         model_artifact_loaded = False
+
+        # Initialize shared database and rate limiter
+        db_path = config.get("db", {}).get("path", "data/demandops.db")
+        db = get_db(db_path)
+        app.state.db = db
+        app.state.rate_limiter = RateLimiter()
 
         # Load feature service — graceful degradation on missing artifacts
         try:
@@ -81,6 +94,36 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
             model_objective=model_objective,
             model_version=model_version,
         )
+
+        # Initialize drift detector (graceful degradation if reference missing)
+        ref_path = Path(
+            config["artifacts"].get(
+                "reference_distributions_path",
+                "artifacts/reference_distributions.json",
+            )
+        )
+        if ref_path.exists():
+            monitoring_cfg = config.get("monitoring", {}).get("drift", {})
+            app.state.drift_detector = DriftDetector(
+                ref_path,
+                maxlen=monitoring_cfg.get("maxlen", 1000),
+                min_samples=monitoring_cfg.get("min_samples", 100),
+            )
+            logger.info("drift_detector_loaded", path=str(ref_path))
+        else:
+            app.state.drift_detector = None
+            logger.warning("drift_detector_skipped", path=str(ref_path))
+
+        # Initialize quality tracker
+        app.state.quality_tracker = QualityTracker(db)
+
+        # Expose monitoring config for routes
+        quality_cfg = config.get("monitoring", {}).get("quality", {})
+        app.state.monitoring_config = {
+            "mae_threshold": 3.20,  # From regression gate
+            "mae_alert_margin": quality_cfg.get("mae_alert_margin", 1.2),
+        }
+
         logger.info(
             "app_started",
             model=model_name,

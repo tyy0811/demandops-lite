@@ -229,12 +229,43 @@ def mock_model() -> MagicMock:
 
 
 @pytest.fixture
-def test_app(mock_feature_service, mock_model):
+def test_db(tmp_path: Path):
+    from demandops.db import get_db
+
+    conn = get_db(str(tmp_path / "test.db"))
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def api_key(test_db) -> str:
+    """Create a test API key, return the raw key."""
+    from demandops.security.auth import hash_key
+
+    raw_key = "test-api-key-for-unit-tests-1234567890"
+    key_hash = hash_key(raw_key)
+    test_db.execute(
+        "INSERT INTO api_keys (key_hash, client_name, created_at, rate_limit, max_batch_size, is_active) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (key_hash, "test_client", "2024-01-01T00:00:00", 1000, 10000, True),
+    )
+    test_db.commit()
+    return raw_key
+
+
+@pytest.fixture
+def test_app(mock_feature_service, mock_model, test_db, api_key):
     from fastapi import FastAPI
+    from demandops.monitoring.quality_tracker import QualityTracker
+    from demandops.security.auth import RateLimiter
     from demandops.serving.routes import configure, router
 
     app = FastAPI()
     app.include_router(router)
+    app.state.db = test_db
+    app.state.rate_limiter = RateLimiter()
+    app.state.quality_tracker = QualityTracker(test_db)
+    app.state.drift_detector = None  # No reference distributions in unit tests
     configure(
         app,
         mock_feature_service,
@@ -249,7 +280,9 @@ def test_app(mock_feature_service, mock_model):
 
 
 @pytest.fixture
-def test_client(test_app):
+def test_client(test_app, api_key):
     from fastapi.testclient import TestClient
 
-    return TestClient(test_app)
+    client = TestClient(test_app)
+    client.headers["Authorization"] = f"Bearer {api_key}"
+    return client

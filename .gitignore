@@ -44,6 +44,9 @@ Thumbs.db
 .ipynb_checkpoints/
 data/zones.csv
 
+# Runtime databases (created on startup, not seed data)
+data/demandops.db
+
 # dbt
 data/demandops.duckdb
 dbt_demandops/target/

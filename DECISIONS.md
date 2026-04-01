@@ -203,3 +203,63 @@ TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemen
 **Decision:** The dbt mart includes temporal features (hour_of_day, day_of_week, is_weekend, month) but not lag or rolling features (lag_1h, lag_24h, lag_168h, rolling_mean_24h). Those are computed downstream in Polars.
 
 **Why:** Lag features require ordered window functions partitioned by zone_id over 2,184 hours × 261 zones. While DuckDB supports this in SQL, Polars expresses it more concisely and efficiently via `shift()` on sorted groups. The boundary — dbt for SQL-natural transforms, Polars for ML-specific features — is a deliberate architectural decision, not a limitation.
+
+## 24. PSI + KS + Correlation Matrix (Not Autoencoder)
+
+**Decision:** Use three complementary drift detection methods: Population Stability Index (PSI), Kolmogorov-Smirnov two-sample test, and Frobenius norm of correlation matrix difference. An autoencoder-based anomaly detector was considered and rejected.
+
+**Why:** PSI is the industry standard for drift detection but is bin-based, making it insensitive to tail changes. KS complements with distribution-wide sensitivity but operates per-feature. The correlation matrix catches joint distribution shifts invisible to per-feature tests (e.g., novel feature combinations where individual features look normal). An autoencoder was rejected because with 9 features and a bottleneck of 8, the compression ratio is too low for meaningful anomaly detection — reconstruction error would be dominated by noise, not distributional novelty.
+
+## 25. sMAPE Over MAPE
+
+**Decision:** Use Symmetric Mean Absolute Percentage Error (sMAPE) instead of MAPE for quality monitoring.
+
+**Why:** Demand data contains genuine zeros (zones with no trips in a given hour). MAPE divides by actual values, so a single zero actual produces infinite MAPE that poisons the aggregate. sMAPE is bounded [0, 200] and handles the zero case gracefully. The count of zero-denominator pairs excluded from sMAPE is reported alongside, so the impact is transparent.
+
+## 26. zone_id Excluded from Correlation Matrix
+
+**Decision:** The correlation matrix for drift detection is computed on the 8 continuous features only. `zone_id` is excluded.
+
+**Why:** `zone_id` is categorical (261 zones in NYC taxi, 802 in TfL, 2,144 in Citibike). Pearson correlation between a categorical variable and continuous features is not meaningful — the Frobenius norm would be dominated by noise in that column.
+
+## 27. SQLite for Prediction Logging and Auth
+
+**Decision:** Use a single SQLite database (`data/demandops.db`) for both prediction logging (quality tracking) and API key storage.
+
+**Why:** No external infrastructure required, portable, sufficient for demo scale. SQLite's WAL mode supports the concurrent read/write pattern (prediction logging during serving, actuals submission, quality queries). A single database avoids managing two files while the tables have no schema overlap.
+
+## 28. Intentionally Vague 401 Response
+
+**Decision:** Authentication failures return `{"detail": "Invalid or inactive API key"}` regardless of whether the key doesn't exist or has been revoked.
+
+**Why:** Distinguishing between "key not found" and "key revoked" enables oracle attacks — an attacker can probe to determine which keys exist. A single vague message prevents this information leak.
+
+## 29. KS Test Uses 5,000-Point Subsample
+
+**Decision:** The KS two-sample test compares incoming data against a stratified subsample of 5,000 training values per feature, not the full training set.
+
+**Why:** `ks_2samp` needs the actual training sample values (not just summary statistics like PSI's quantile boundaries). Storing the full training feature vectors would bloat the reference artifact significantly (3,207 series x thousands of rows). A 5,000-point subsample is sufficient for a stable KS test while keeping the artifact under 5MB. The subsample size is recorded in artifact metadata for reproducibility.
+
+## 30. On-Demand Drift Computation
+
+**Decision:** Drift metrics are computed only when `GET /monitoring/drift` is called. Feature vectors accumulate passively in a bounded deque (maxlen=1000) — no background threads, no periodic timers.
+
+**Why:** Continuous monitoring with background threads adds concurrency complexity (thread-safe accumulation, periodic scheduling, timer management) to a serving layer that is otherwise stateless. The on-demand approach gives the same cross-request drift picture without the complexity. The deque accumulates samples passively from all prediction requests; the drift endpoint is the computation trigger. Simpler to test, no concurrency bugs beyond the deque's own thread-safe append.
+
+## 31. Prometheus Gauges Updated on Endpoint Call (Not Continuously)
+
+**Decision:** Drift and quality Prometheus gauges (`demandops_drift_psi`, `demandops_quality_mae`, etc.) are set when their respective monitoring endpoints are called, not on every prediction request.
+
+**Why:** Follows from Decision #30 (on-demand drift). Computing PSI/KS/correlation on every request would add ~50ms latency to the prediction path. Instead, the gauges update when an operator or Grafana hits `/monitoring/drift` or `/monitoring/quality` — which is also when the JSON response is computed. The scrape interval in Prometheus (typically 15–60s) controls freshness, not the prediction path.
+
+## 32. ASGI Request Size Limit (10MB)
+
+**Decision:** A `RequestSizeLimitMiddleware` rejects requests with `Content-Length` exceeding 10MB before JSON parsing.
+
+**Why:** The Pydantic `max_length=10_000` on `BatchPredictRequest` validates record count after parsing, but a malicious client could send an arbitrarily large JSON body that consumes memory during parsing. The 10MB limit is generous for legitimate use (a 10K-record batch is ~3MB) while blocking pathological payloads at the ASGI layer, before any deserialization occurs.
+
+## 33. Per-Client Usage Tracking via SQLite UPSERT
+
+**Decision:** Usage is tracked in a `usage_log` table with a `(client_name, endpoint, date)` composite primary key, incremented via `INSERT ... ON CONFLICT DO UPDATE` on each successful prediction.
+
+**Why:** The rate limiter is in-memory and resets on restart (by design — Decision #30). Usage tracking needs to survive restarts for billing/auditing visibility. SQLite UPSERT aggregates per day without requiring a separate counter service. One row per client per endpoint per day keeps the table small even over months of operation.

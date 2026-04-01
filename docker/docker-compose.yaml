@@ -10,5 +10,8 @@ services:
     volumes:
       - ../data/processed:/app/data/processed:ro
       - ../artifacts:/app/artifacts:ro
+      # data/demandops.db is created at startup inside the container.
+      # Add a named volume here to persist API keys and prediction logs
+      # across restarts: - demandops-db:/app/data
     environment:
       - PYTHONUNBUFFERED=1

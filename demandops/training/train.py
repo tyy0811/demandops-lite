@@ -14,6 +14,7 @@ import structlog
 from demandops.data.splits import split_from_config
 from demandops.features import FEATURE_COLUMNS, TARGET_COLUMN
 from demandops.models.registry import create_model
+from demandops.training.reference_distributions import generate_reference_distributions
 
 logger = structlog.get_logger()
 
@@ -47,6 +48,11 @@ def train_model(
 
     # Save feature schema (same for all models)
     _save_feature_schema(feature_schema_path)
+
+    # Save reference distributions for drift detection
+    ref_path = models_dir.parent / "reference_distributions.json"
+    generate_reference_distributions(X_train, ref_path)
+    logger.info("reference_distributions_saved", path=str(ref_path))
 
     # Save model artifact (fix #4: joblib for LightGBM)
     models_dir.mkdir(parents=True, exist_ok=True)

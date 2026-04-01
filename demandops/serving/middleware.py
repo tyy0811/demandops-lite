@@ -1,4 +1,4 @@
-"""Request logging middleware."""
+"""Request logging and size-limit middleware."""
 
 from __future__ import annotations
 
@@ -8,9 +8,29 @@ import uuid
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 logger = structlog.get_logger()
+
+# 10MB — generous enough for 10K-record batches (~3MB typical),
+# blocks pathological payloads before JSON parsing.
+MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds MAX_REQUEST_BODY_BYTES."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        content_length = request.headers.get("content-length")
+        if content_length is not None and int(content_length) > MAX_REQUEST_BODY_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "detail": f"Request body too large ({int(content_length)} bytes, "
+                    f"limit {MAX_REQUEST_BODY_BYTES} bytes)"
+                },
+            )
+        return await call_next(request)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
