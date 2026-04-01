@@ -144,3 +144,36 @@ class TestPredictionToDriftPipeline:
                 headers=headers,
             )
             assert actuals_resp.json()["matched_count"] == 1
+
+    def test_usage_logged_through_predict(self, integration_app) -> None:
+        app, key = integration_app
+        client = TestClient(app)
+        headers = {"Authorization": f"Bearer {key}"}
+
+        # Single prediction
+        client.post(
+            "/predict",
+            json={"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+            headers=headers,
+        )
+        # Batch prediction (2 records)
+        client.post(
+            "/predict/batch",
+            json={
+                "requests": [
+                    {"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"},
+                    {"zone_id": 2, "hour_ts": "2024-02-01T13:00:00"},
+                ]
+            },
+            headers=headers,
+        )
+
+        resp = client.get("/monitoring/usage?client=integration")
+        data = resp.json()
+        endpoints = {r["endpoint"]: r for r in data}
+        assert "/predict" in endpoints
+        assert endpoints["/predict"]["request_count"] == 1
+        assert endpoints["/predict"]["total_records"] == 1
+        assert "/predict/batch" in endpoints
+        assert endpoints["/predict/batch"]["request_count"] == 1
+        assert endpoints["/predict/batch"]["total_records"] == 2

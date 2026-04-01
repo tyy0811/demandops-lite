@@ -368,3 +368,45 @@ class TestAuthOnPredictionEndpoints:
             json={"requests": [{"zone_id": 1, "hour_ts": "2024-02-01T12:00:00"}] * 6},
         )
         assert resp.status_code == 413
+
+
+class TestRequestSizeLimitMiddleware:
+    def test_rejects_oversized_content_length(self) -> None:
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from demandops.serving.middleware import RequestSizeLimitMiddleware
+
+        app = FastAPI()
+        app.add_middleware(RequestSizeLimitMiddleware)
+
+        @app.post("/echo")
+        async def echo():
+            return {"ok": True}
+
+        client = TestClient(app)
+        # Fake a Content-Length header larger than 10MB
+        resp = client.post(
+            "/echo",
+            content=b"x",
+            headers={"Content-Length": str(11 * 1024 * 1024)},
+        )
+        assert resp.status_code == 413
+        assert "too large" in resp.json()["detail"]
+
+    def test_allows_normal_requests(self) -> None:
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from demandops.serving.middleware import RequestSizeLimitMiddleware
+
+        app = FastAPI()
+        app.add_middleware(RequestSizeLimitMiddleware)
+
+        @app.post("/echo")
+        async def echo():
+            return {"ok": True}
+
+        client = TestClient(app)
+        resp = client.post("/echo", content=b"small payload")
+        assert resp.status_code == 200

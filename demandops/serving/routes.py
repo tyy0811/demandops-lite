@@ -21,7 +21,7 @@ from demandops.serving.metrics import (
     REQUEST_COUNT,
     REQUEST_LATENCY,
 )
-from demandops.security.auth import requires_auth
+from demandops.security.auth import log_usage, requires_auth
 from demandops.serving.schemas import (
     BatchPredictRequest,
     BatchPredictResponse,
@@ -112,6 +112,9 @@ async def predict(body: PredictRequest, request: Request, client: dict = Depends
                 hour_ts=body.hour_ts.isoformat(),
                 predicted_value=predicted_count,
             )
+
+        # Log usage
+        log_usage(request.app.state.db, client["client_name"], "/predict", record_count=1)
 
         logger.info(
             "prediction",
@@ -245,6 +248,14 @@ async def predict_batch(
         latency_ms = (time.perf_counter() - start) * 1000
         REQUEST_COUNT.labels(endpoint="/predict/batch", status="200").inc()
         REQUEST_LATENCY.labels(endpoint="/predict/batch").observe(time.perf_counter() - start)
+
+        # Log usage
+        log_usage(
+            request.app.state.db,
+            client["client_name"],
+            "/predict/batch",
+            record_count=len(predictions),
+        )
 
         logger.info(
             "batch_prediction",

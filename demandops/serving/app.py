@@ -15,7 +15,7 @@ from demandops.monitoring.drift_detector import DriftDetector
 from demandops.monitoring.quality_tracker import QualityTracker
 from demandops.security.auth import RateLimiter
 from demandops.serving.feature_service import FeatureService
-from demandops.serving.middleware import RequestLoggingMiddleware
+from demandops.serving.middleware import RequestLoggingMiddleware, RequestSizeLimitMiddleware
 from demandops.serving.monitoring_routes import monitoring_router
 from demandops.serving.routes import configure, router
 
@@ -32,6 +32,7 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
         version="0.1.0",
     )
     app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
     app.include_router(router)
     app.include_router(monitoring_router)
 

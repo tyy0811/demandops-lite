@@ -1,11 +1,13 @@
-"""API key authentication and per-client rate limiting."""
+"""API key authentication, per-client rate limiting, and usage tracking."""
 
 from __future__ import annotations
 
 import collections
 import hashlib
+import sqlite3
 import threading
 import time
+from datetime import date
 
 from fastapi import HTTPException, Request
 
@@ -78,3 +80,49 @@ async def requires_auth(request: Request) -> dict:
         "rate_limit": rate_limit,
         "max_batch_size": max_batch_size,
     }
+
+
+def log_usage(
+    db: sqlite3.Connection,
+    client_name: str,
+    endpoint: str,
+    record_count: int = 1,
+) -> None:
+    """Increment usage counters for a client. Called after successful prediction."""
+    today = date.today().isoformat()
+    db.execute(
+        "INSERT INTO usage_log (client_name, endpoint, date, request_count, total_records) "
+        "VALUES (?, ?, ?, 1, ?) "
+        "ON CONFLICT(client_name, endpoint, date) DO UPDATE SET "
+        "request_count = request_count + 1, total_records = total_records + excluded.total_records",
+        (client_name, endpoint, today, record_count),
+    )
+    db.commit()
+
+
+def get_usage(
+    db: sqlite3.Connection,
+    client_name: str | None = None,
+) -> list[dict]:
+    """Return usage stats, optionally filtered by client."""
+    if client_name:
+        rows = db.execute(
+            "SELECT client_name, endpoint, date, request_count, total_records "
+            "FROM usage_log WHERE client_name = ? ORDER BY date DESC",
+            (client_name,),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT client_name, endpoint, date, request_count, total_records "
+            "FROM usage_log ORDER BY date DESC"
+        ).fetchall()
+    return [
+        {
+            "client_name": r[0],
+            "endpoint": r[1],
+            "date": r[2],
+            "request_count": r[3],
+            "total_records": r[4],
+        }
+        for r in rows
+    ]

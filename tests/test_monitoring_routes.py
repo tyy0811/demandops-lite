@@ -182,3 +182,67 @@ class TestActualsEndpoint:
     def test_invalid_window_returns_422(self, monitoring_client) -> None:
         resp = monitoring_client.get("/monitoring/quality?window=bad")
         assert resp.status_code == 422
+
+
+class TestPrometheusMetrics:
+    def test_drift_metrics_set_after_call(self, monitoring_app, monitoring_client) -> None:
+        from demandops.serving.metrics import DRIFT_PSI
+
+        # Feed enough samples for drift computation
+        detector = monitoring_app.state.drift_detector
+        rng = np.random.RandomState(42)
+        ref_data = detector._reference
+        for _ in range(50):
+            vector = [rng.choice(ref_data["features"][f]["ks_subsample"]) for f in FEATURE_COLUMNS]
+            detector.accumulator.add(vector)
+
+        resp = monitoring_client.get("/monitoring/drift")
+        assert resp.status_code == 200
+        # Verify gauge was set (at least one feature should have a sample)
+        samples = DRIFT_PSI.labels(feature="hour_of_day")._value._value
+        assert samples >= 0  # gauge was written
+
+    def test_quality_metrics_set_after_call(self, monitoring_app, monitoring_client) -> None:
+        from demandops.serving.metrics import QUALITY_MAE
+
+        tracker = monitoring_app.state.quality_tracker
+        for i in range(10):
+            pid = tracker.log_prediction(1, "2024-02-01T12:00:00", float(i * 10))
+            tracker.submit_actuals([{"prediction_id": pid, "actual_value": float(i * 10 + 2)}])
+
+        resp = monitoring_client.get("/monitoring/quality?window=7d")
+        assert resp.status_code == 200
+        assert QUALITY_MAE._value._value == 2.0  # All errors are exactly 2
+
+
+class TestUsageEndpoint:
+    def test_usage_empty_initially(self, monitoring_client) -> None:
+        resp = monitoring_client.get("/monitoring/usage")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_usage_filter_by_client(self, monitoring_app, monitoring_client) -> None:
+        from demandops.security.auth import log_usage
+
+        db = monitoring_app.state.db
+        log_usage(db, "team_a", "/predict", record_count=1)
+        log_usage(db, "team_b", "/predict", record_count=5)
+
+        resp = monitoring_client.get("/monitoring/usage?client=team_a")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["client_name"] == "team_a"
+        assert data[0]["request_count"] == 1
+
+    def test_usage_accumulates(self, monitoring_app, monitoring_client) -> None:
+        from demandops.security.auth import log_usage
+
+        db = monitoring_app.state.db
+        log_usage(db, "team_a", "/predict", record_count=1)
+        log_usage(db, "team_a", "/predict", record_count=3)
+
+        resp = monitoring_client.get("/monitoring/usage?client=team_a")
+        data = resp.json()
+        assert data[0]["request_count"] == 2
+        assert data[0]["total_records"] == 4

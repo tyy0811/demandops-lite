@@ -41,6 +41,16 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pred_zone_ts ON prediction_log(zone_id, hour_ts)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS usage_log (
+            client_name     TEXT NOT NULL,
+            endpoint        TEXT NOT NULL,
+            date            TEXT NOT NULL,
+            request_count   INTEGER NOT NULL DEFAULT 0,
+            total_records   INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (client_name, endpoint, date)
+        )
+    """)
     conn.commit()
 
 
