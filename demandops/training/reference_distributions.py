@@ -52,10 +52,28 @@ def generate_reference_distributions(
             "ks_subsample": subsample,
         }
 
-    # Correlation matrix on continuous features only (zone_id excluded)
+    # Correlation matrix on continuous features only (zone_id excluded).
+    # Exclude zero-variance columns to avoid NaN from np.corrcoef.
     cont_data = X_train[:, CONTINUOUS_INDICES]
-    ref["correlation_matrix"] = np.corrcoef(cont_data, rowvar=False).tolist()
+    variances = np.var(cont_data, axis=0)
+    valid_mask = variances > 0
+    valid_indices = np.where(valid_mask)[0]
+
+    if len(valid_indices) >= 2:
+        corr = np.corrcoef(cont_data[:, valid_indices], rowvar=False)
+    else:
+        corr = np.eye(len(valid_indices)) if len(valid_indices) == 1 else np.array([[]])
+
+    # Store as full-size matrix with NaN replaced by 0 for constant columns,
+    # plus a mask so downstream consumers know which columns were valid.
+    full_corr = np.zeros((len(CONTINUOUS_FEATURES), len(CONTINUOUS_FEATURES)))
+    for i_out, i_in in enumerate(valid_indices):
+        for j_out, j_in in enumerate(valid_indices):
+            full_corr[i_in, j_in] = corr[i_out, j_out]
+
+    ref["correlation_matrix"] = full_corr.tolist()
     ref["correlation_features"] = CONTINUOUS_FEATURES
+    ref["correlation_valid_mask"] = valid_mask.tolist()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(ref, indent=2))

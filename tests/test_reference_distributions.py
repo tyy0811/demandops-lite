@@ -101,3 +101,24 @@ class TestGenerateReferenceDistributions:
         ref = json.loads(output_path.read_text())
         assert ref["metadata"]["ks_subsample_size"] == 500
         assert ref["metadata"]["n_training_rows"] == 1000
+
+    def test_constant_column_produces_no_nan(
+        self, tmp_path: Path, training_features
+    ) -> None:
+        from demandops.training.reference_distributions import (
+            generate_reference_distributions,
+        )
+
+        # Make "month" constant (index 3) — simulates single-month training split
+        features_with_constant = training_features.copy()
+        features_with_constant[:, 3] = 1.0  # month = January
+
+        output_path = tmp_path / "ref.json"
+        generate_reference_distributions(features_with_constant, output_path)
+        ref = json.loads(output_path.read_text())
+        corr = np.array(ref["correlation_matrix"])
+        assert not np.any(np.isnan(corr)), "Correlation matrix should not contain NaN"
+        # The constant column should have zeros in its row/column
+        assert corr[3, 3] == 0.0
+        # Valid mask should mark the constant column as invalid
+        assert ref["correlation_valid_mask"][3] is False

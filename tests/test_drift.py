@@ -185,6 +185,23 @@ class TestCorrelationShift:
         assert shift == 0.0
         assert n_excluded == n_cont
 
+    def test_nan_in_reference_excluded(self) -> None:
+        """Reference matrix with NaN (constant training column) doesn't produce NaN."""
+        from demandops.monitoring.drift_detector import compute_correlation_shift
+
+        # Simulate a reference matrix where column 2 was constant during training
+        n = 8
+        ref_corr = np.eye(n)
+        ref_corr[2, :] = np.nan
+        ref_corr[:, 2] = np.nan
+
+        rng = np.random.RandomState(42)
+        samples = rng.randn(100, n)
+
+        shift, n_excluded = compute_correlation_shift(ref_corr, samples)
+        assert not np.isnan(shift), "shift should not be NaN"
+        assert n_excluded >= 1  # Column 2 should be excluded
+
 
 class TestDriftAccumulator:
     def test_insufficient_samples_returns_none(self) -> None:

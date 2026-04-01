@@ -52,24 +52,32 @@ def compute_correlation_shift(
 ) -> tuple[float, int]:
     """Frobenius norm of correlation matrix difference, normalized by feature pairs.
 
-    Returns (shift, n_excluded) where n_excluded is the count of zero-variance
-    columns excluded from the computation. Zero-variance columns produce NaN
-    in np.corrcoef (e.g., all requests from the same hour).
+    Returns (shift, n_excluded) where n_excluded is the count of columns
+    excluded from the computation. Columns are excluded if they have zero
+    variance in the current data OR if the reference correlation matrix
+    contains NaN/zero rows for that column (constant in training data).
     """
     variances = np.var(current_continuous, axis=0)
-    nonzero_mask = variances > 0
+    current_valid = variances > 0
 
+    # Also exclude columns that were constant in training (NaN or zero diagonal)
+    ref_diag = np.diag(reference_corr)
+    ref_valid = ~np.isnan(ref_diag) & (ref_diag != 0)
+
+    nonzero_mask = current_valid & ref_valid
     n_excluded = int(np.sum(~nonzero_mask))
     n_valid = int(np.sum(nonzero_mask))
 
     if n_valid < 2:
-        # Can't compute correlation with fewer than 2 varying columns
         return 0.0, n_excluded
 
-    # Subset both current data and reference correlation to non-constant columns
     valid_idx = np.where(nonzero_mask)[0]
     current_subset = current_continuous[:, valid_idx]
     ref_subset = reference_corr[np.ix_(valid_idx, valid_idx)]
+
+    # Guard against any remaining NaN in the reference subset
+    if np.any(np.isnan(ref_subset)):
+        ref_subset = np.nan_to_num(ref_subset, nan=0.0)
 
     current_corr = np.corrcoef(current_subset, rowvar=False)
     diff = current_corr - ref_subset

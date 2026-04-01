@@ -11,9 +11,12 @@ from fastapi import FastAPI
 
 from demandops.db import get_db
 from demandops.models.registry import create_model
+from demandops.monitoring.drift_detector import DriftDetector
+from demandops.monitoring.quality_tracker import QualityTracker
 from demandops.security.auth import RateLimiter
 from demandops.serving.feature_service import FeatureService
 from demandops.serving.middleware import RequestLoggingMiddleware
+from demandops.serving.monitoring_routes import monitoring_router
 from demandops.serving.routes import configure, router
 
 logger = structlog.get_logger()
@@ -30,6 +33,7 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
     )
     app.add_middleware(RequestLoggingMiddleware)
     app.include_router(router)
+    app.include_router(monitoring_router)
 
     @app.on_event("startup")
     async def startup():
@@ -89,6 +93,27 @@ def create_app(config_path: str = "configs/default.yaml") -> FastAPI:
             model_objective=model_objective,
             model_version=model_version,
         )
+
+        # Initialize drift detector (graceful degradation if reference missing)
+        ref_path = Path(config["artifacts"].get(
+            "reference_distributions_path",
+            "artifacts/reference_distributions.json",
+        ))
+        if ref_path.exists():
+            monitoring_cfg = config.get("monitoring", {}).get("drift", {})
+            app.state.drift_detector = DriftDetector(
+                ref_path,
+                maxlen=monitoring_cfg.get("maxlen", 1000),
+                min_samples=monitoring_cfg.get("min_samples", 100),
+            )
+            logger.info("drift_detector_loaded", path=str(ref_path))
+        else:
+            app.state.drift_detector = None
+            logger.warning("drift_detector_skipped", path=str(ref_path))
+
+        # Initialize quality tracker
+        app.state.quality_tracker = QualityTracker(db)
+
         logger.info(
             "app_started",
             model=model_name,
