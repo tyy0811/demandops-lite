@@ -263,3 +263,15 @@ TfL chosen over Citibike: European data for EU target companies (FREENOW, Siemen
 **Decision:** Usage is tracked in a `usage_log` table with a `(client_name, endpoint, date)` composite primary key, incremented via `INSERT ... ON CONFLICT DO UPDATE` on each successful prediction.
 
 **Why:** The rate limiter is in-memory and resets on restart (by design — Decision #30). Usage tracking needs to survive restarts for billing/auditing visibility. SQLite UPSERT aggregates per day without requiring a separate counter service. One row per client per endpoint per day keeps the table small even over months of operation.
+
+## 34. Per-Route `Depends(requires_auth)`, Not Global Middleware
+
+**Decision:** Authentication is applied via FastAPI's `Depends(requires_auth)` on individual route definitions, not as global middleware with an exemption list.
+
+**Why:** Per-route dependency injection makes the auth boundary explicit in each route definition. Global middleware with an exemption list inverts the safety default — new endpoints are authenticated unless someone remembers to exempt them. The dependency pattern means new monitoring endpoints are open by default and new data-writing endpoints require an explicit `requires_auth` annotation. This also makes testing straightforward: unauthenticated test clients naturally hit the open endpoints, and auth tests only need to inject a Bearer header.
+
+## 35. Synchronous Prediction Logging (~1ms), Not Async
+
+**Decision:** Prediction logging to SQLite is synchronous within the request handler, not deferred to an async background task.
+
+**Why:** Synchronous SQLite writes add ~1ms per prediction. Async logging would reduce this to near-zero but introduces failure modes (lost writes if the server crashes before the async flush) and makes the quality tracking pipeline harder to test — you can't assert that a prediction was logged immediately after the API returns. The `prediction_id` returned in the response must match the row in `prediction_log` for actuals matching to work, so the write must complete before the response. At demo scale, 1ms is negligible; at production scale, the fix is a write-ahead buffer, not async fire-and-forget.

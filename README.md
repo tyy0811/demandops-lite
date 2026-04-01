@@ -21,7 +21,7 @@ End-to-end demand prediction pipeline with DatasetAdapter pattern — from data 
 | LightGBM MAE | **2.90** | 0.77 | **0.95** |
 | LightGBM vs Slot Mean | -14.6% | +1.9% | -7.7% |
 
-LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.6% MAE), while low-variance bike stations are well-served by a simple historical mean (+1.9%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 33 documented design rationales.
+LightGBM's advantage scales with demand heterogeneity — taxi zones with high variance benefit most (-14.6% MAE), while low-variance bike stations are well-served by a simple historical mean (+1.9%). We tested Poisson vs regression objectives; regression won by 0.2% MAE. The London result where LightGBM barely wins is the most informative row in the table — it tells you where the model stops adding value. See [DECISIONS.md](DECISIONS.md) for 35 documented design rationales.
 
 Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/benchmark_report_tfl.md`](docs/benchmark_report_tfl.md) | [`docs/benchmark_report_citibike.md`](docs/benchmark_report_citibike.md)
 
@@ -47,6 +47,10 @@ Full reports: [`docs/benchmark_report.md`](docs/benchmark_report.md) | [`docs/be
 | Batch inference | Single-record only | `/predict/batch` (up to 10K) | Production serving |
 | Objective selection | regression (implicit) | regression vs. Poisson (documented) | Scientific rigor |
 | API contract | model_name only | + model_version, model_objective | Serving observability |
+| Security | None | API key auth (SHA-256), per-client rate limiting, batch size enforcement | Access control |
+| Drift detection | None | PSI + KS + correlation shift, on-demand via `/monitoring/drift` | ML observability |
+| Quality monitoring | None | sMAPE/MAE/RMSE with actuals matching, drift-quality correlation | Post-deployment |
+| Usage tracking | None | Per-client request/record counts via SQLite UPSERT | Multi-tenant ops |
 
 See [DECISIONS.md](DECISIONS.md) for the reasoning behind each design choice.
 
@@ -297,7 +301,7 @@ python -m demandops.manage_keys list
 python -m demandops.manage_keys revoke --client "analytics_team"
 ```
 
-Per-client rate limiting (sliding window, 60s) and per-key batch size enforcement.
+Per-client rate limiting (sliding window, 60s) and per-key batch size enforcement. Prediction and data-writing endpoints require authentication. Monitoring reads and health checks stay open for Prometheus scraping and operational dashboards.
 
 ### Drift Detection
 
